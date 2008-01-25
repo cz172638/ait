@@ -12,7 +12,7 @@ from dbstats import dbstats
 def get_rates(db, server, client):
 	db.cursor.execute('''
 				select distinct res.rate
-				  from results res,
+				  from latency_per_rate_avg res,
 				       report rep,
 				       environment e,
 				       machine m,
@@ -33,7 +33,7 @@ def get_rates(db, server, client):
 def get_kernel_releases(db, server, client):
 	db.cursor.execute('''
 				select distinct s.kernel_release
-				  from results res,
+				  from latency_per_rate_avg res,
 				       report rep,
 				       environment e,
 				       client_machine client,
@@ -56,7 +56,7 @@ def get_kernel_releases(db, server, client):
 def get_kernel_max_rate(db, kernel, server, client):
 	db.cursor.execute('''
 				select max(res.rate)
-				  from results res,
+				  from latency_per_rate_avg res,
 				       report rep,
 				       environment e,
 				       client_machine client,
@@ -83,16 +83,16 @@ def get_latest_report_id(db):
 		return int(result[0])
 	return None
 
-def get_results(db, rate, result_field, server, client):
+def get_latency_per_rate_metric(db, rate, metric, server, client):
 	db.cursor.execute('''
 				select distinct res.report,
 				       rep.env,
 				       e.tunings,
 				       s.kernel_release,
-				       res.%s,
+				       res.value,
 				       t.*,
 				       client.nodename
-				  from results res,
+				  from latency_per_rate_%s res,
 				       report rep,
 				       environment e,
 				       machine m,
@@ -108,9 +108,9 @@ def get_results(db, rate, result_field, server, client):
 					res.rate = %d and
 					m.nodename = "%s" and
 					client.nodename = "%s"
-				  order by res.%s
+				  order by res.value
 				  limit 10
-			  ''' % (result_field, rate, server, client, result_field))
+			  ''' % (metric, rate, server, client))
 	return db.cursor.fetchall()
 
 def get_common_columns(results, columns):
@@ -132,8 +132,8 @@ def remove_common_columns(columns, common_columns):
 def print_rate(db, rate, server, client):
 	print "rate: %d" % rate
 	print "-" * 78
-	for result_field in ("avg", "min", "max", "dev"):
-		results = get_results(db, rate, result_field, server, client)
+	for metric in ("avg", "min", "max", "dev"):
+		results = get_latency_per_rate_metric(db, rate, metric, server, client)
 
 		columns = [column[0] for column in db.cursor.description]
 		common_columns = get_common_columns(results, columns)

@@ -174,15 +174,15 @@ class dbstats:
 		except:
 			pass
 
-		try:
-			self.cursor.execute('''
-				create table results (report int, rate int,
-						      min real, avg real,
-						      max real, dev real,
-						      cnt int)
-			''')
-		except:
-			pass
+		for metric in [ "avg", "min", "max", "dev" ]:
+			try:
+				self.cursor.execute('''
+					create table latency_per_rate_%s (report int,
+									  rate int,
+									  value real)
+				''' % metric)
+			except:
+				pass
 
 		try:
 			self.cursor.execute('''
@@ -320,11 +320,9 @@ class dbstats:
 
 	def get_max_rate_for_report(self, report):
 		self.cursor.execute('''
-					select max(res.rate)
-					  from results res,
-					       report rep
-					  where res.report = %d and
-					  	res.report = rep.rowid
+					select max(rate)
+					  from latency_per_rate_avg
+					  where report = %d
 				  ''' % report)
 		results = self.cursor.fetchall()
 		if results and results[0][0]:
@@ -517,13 +515,11 @@ class dbstats:
 		self.report = self.get_report_id(server_env_id, client_machine_id, ctime, report)
 		return True
 
-	def insert_table(self, rates):
+	def insert_latency_per_rate(self, metric, rates):
 		for rate in rates.keys():
-			parms = (self.report, rate) + rates[rate]
 			self.cursor.execute('''
-				insert into results ( report, rate, min, avg,
-						      max, dev, cnt)
-					     values ( "%d", "%f", "%f", "%f",
-						      "%f", "%f", "%d" )
-				       ''' % parms)
+				insert into latency_per_rate_%s ( report, rate, value )
+					     values ( %d, %d, "%f" )
+				       ''' % (metric, self.report,
+				       	      rate, rates[rate]))
 		self.conn.commit()

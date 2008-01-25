@@ -4,7 +4,7 @@
 
 from dbstats import dbstats
 
-class rates_report:
+class latencies_per_rate_report:
 	def __init__(self, filename):
 		self.rates = {}
 		self._load_latencies_report(filename)
@@ -18,7 +18,7 @@ class rates_report:
 			fields = line.strip().split(',')
 			rate = int(fields[0])
 
-			self.rates[rate] = tuple([float(i) for i in fields[1:-1]]) + (int(fields[-1]),)
+			self.rates[rate] = tuple([float(i) for i in fields])
 		f.close()
 
 if __name__ == '__main__':
@@ -35,5 +35,10 @@ if __name__ == '__main__':
 		print "report %s already in database" % report
 		sys.exit(1)
 
-	r = rates_report("%s.cit" % report)
-	db.insert_table(r.rates)
+	r = latencies_per_rate_report("%s.cit" % report)
+	metrics = [ "min", "avg", "max", "dev" ]
+	for metric in range(len(metrics)):
+		metric_rates = {}
+		for rate in r.rates.keys():
+			metric_rates[rate] = r.rates[rate][metric]
+		db.insert_latency_per_rate(metrics[metric], metric_rates)

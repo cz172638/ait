@@ -19,8 +19,8 @@ metric_captions = {
 
 def get_results(db, metric, report):
 	db.cursor.execute('''
-				select %s, rate
-				   from results
+				select value, rate
+				  from latency_per_rate_%s
 				  where report = %d
 				  order by rate
 			  ''' % (metric, report))
