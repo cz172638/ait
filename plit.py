@@ -8,7 +8,7 @@ except:
 	from sqlite import connect as sqlite3_connect
 
 from dbstats import dbstats
-import utilist, rit
+import utilist, rit, os
 
 metric_captions = {
 	"avg": "Average Latency",
@@ -247,46 +247,54 @@ def create_html(db, ref, others):
 	columns = [column[0] for column in db.cursor.description]
 	common_columns = get_common_columns([ ref, ] + others, columns)
 
-	f.write('<h1>Specific Tunings:</h0><table border=1 style="background-color: #8aa;400px; border: thin solid black; font-family: sans-serif; font-size: 10px;"><tr>')
+	f.write('<h1>Specific Tunings:</h0>\n<table border=1 style="background-color: #8aa;400px; border: thin solid black; font-family: sans-serif; font-size: 10px;">\n<tr>')
 	f.write("<th>report</th><th>max<br>packet<br>rate</th>")
 	for column in range(len(columns)):
 		if column not in common_columns:
 			f.write("<th>%s</th>" % columns[column].replace("_", "<br>"))
 
 	color_index = 0
-	f.write('</tr><tr>')
+	f.write('</tr>\n<tr>')
 
 	f.write('<td style="background-color: %s">%s</td>' % (html_colors[colors[color_index]], ref["report"]))
 	f.write('<td>%d</td>' % ref["max_report_rate"])
 	color_index += 1
 	for field in range(len(columns)):
 		if field not in common_columns:
-			f.write("<td>%s</td>" % ref["system_tunings"][field])
+			if columns[field] == "lock_stat" and \
+			   os.access("lock_stat/%d.txt", os.F_OK):
+				f.write("<td><a href=lock_stat/%s.txt>%s</a></td>" % (ref["report"], ref["system_tunings"][field]))
+			else:
+				f.write("<td>%s</td>" % ref["system_tunings"][field])
 
 	for other in others:
-		f.write('</tr><tr>')
+		f.write('</tr>\n<tr>')
 
 		f.write('<td style="background-color: %s">%s</td>' % (html_colors[colors[color_index]], other["report"]))
 		f.write('<td>%d</td>' % other["max_report_rate"])
 		color_index += 1
 		for field in range(len(columns)):
 			if field not in common_columns:
-				f.write("<td>%s</td>" % other["system_tunings"][field])
+				if columns[field] == "lock_stat" and \
+				   os.access("lock_stat/%d.txt" % other["report"], os.F_OK):
+					f.write("<td><a href=lock_stat/%s.txt>%s</a></td>" % (other["report"], other["system_tunings"][field]))
+				else:
+					f.write("<td>%s</td>" % other["system_tunings"][field])
 
-	f.write('</tr><tr></table>')
+	f.write('</tr>\n</table>\n')
 
-	f.write('<h1>Common Tunings:</h1><table border=1 style="background-color: #8aa;400px; border: thin solid black; font-family: sans-serif; font-size: 10px;"><tr>')
+	f.write('<h1>Common Tunings:</h1>\n<table border=1 style="background-color: #8aa;400px; border: thin solid black; font-family: sans-serif; font-size: 10px;">\n<tr>')
 	for column in common_columns:
 		f.write("<th>%s</th>" % columns[column].replace("_", "<br>"))
-	f.write('</tr><tr>')
+	f.write('</tr>\n<tr>')
 	for column in common_columns:
 		f.write("<td>%s</td>" % ref["system_tunings"][column])
 		
-	f.write("</tr></table>")
+	f.write("</tr>\n</table>\n")
 	for metric in metrics[1:]:
-		f.write('<img src="%s_%s.png">' % (prefix, metric))
-	f.write('<img src="%s_max_rates.png">' % prefix)
-	f.write("</tr></table></body></html>")
+		f.write('<img src="%s_%s.png">\n' % (prefix, metric))
+	f.write('<img src="%s_max_rates.png">\n' % prefix)
+	f.write("</tr>\n</table>\n</body>\n</html>\n")
 
 	f.close()
 
