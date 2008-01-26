@@ -25,15 +25,13 @@ if __name__ == '__main__':
 	import sys, os
 
 	appname = sys.argv[1]
-	server_process_name = sys.argv[2]
 	client_machine = sys.argv[3]
 	server_machine = sys.argv[4]
 	report = sys.argv[5]
 
 	db = dbstats(appname)
 
-	if not db.setreport(report, server_process_name,
-			    client_machine, server_machine):
+	if not db.setreport(report, client_machine, server_machine):
 		print "report %s already in database" % report
 		sys.exit(1)
 

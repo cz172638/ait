@@ -2,7 +2,7 @@
 # -*- python -*-
 # -*- coding: utf-8 -*-
 
-import ethtool, os, procfs, schedutils
+import ethtool, os, procfs, schedutils, sys, utilist
 
 def get_tso_state():
 	state=""
@@ -56,6 +56,7 @@ def get_nic_kthread_rtprios(irqs, ps):
 
 if __name__ == '__main__':
 
+	app_process_name = sys.argv[1]
 	sysinfo = {}
 
 	pfs = procfs.stats()
@@ -124,6 +125,26 @@ if __name__ == '__main__':
 		sysinfo["idle"] = kcmd.options["idle"]
 
 	sysinfo["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
+
+	app = pfs.find_by_name(app_process_name)
+	if app:
+		sysinfo["server_rtprio"] = pfs.get_rtprios(app_process_name)
+		sysinfo["server_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(app[0]),
+												    int(sysinfo["nr_cpus"])), "%x")
+		sysinfo["server_sched"] = schedutils.schedstr(schedutils.get_scheduler(app[0]))
+
+		# Default: libc statically linked
+		sysinfo["libc"] = None
+		# Discover which libc is being used by the server process
+		smaps = procfs.smaps(app[0])
+		if smaps:
+			libc = smaps.find_by_name_fragment("/libc-")
+			if libc:
+				sysinfo["libc"] = libc[0].name
+	else:
+		sysinfo["server_rtprio"] = None
+		sysinfo["server_affinity"] = None
+		sysinfo["server_sched"] = None
 
 	keys = sysinfo.keys()
 	keys.sort()

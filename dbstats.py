@@ -7,10 +7,7 @@ try:
 except:
 	from sqlite import connect as sqlite3_connect
 
-import schedutils
-import os, sys
-import procfs
-import utilist
+import os
 
 def dbutil_create_text_table_query(table, columns):
 	query = "create table %s (%s)" % (table,
@@ -343,9 +340,7 @@ class dbstats:
 
 		return machine_id
 
-	def setreport(self, report, server_process_name,
-		      client_machine, server_machine):
-		pfs = procfs.stats()
+	def setreport(self, report, client_machine, server_machine):
 
 		# Load the client and server hardware info from the data
 		# collected by ait-get-sysinfo.py
@@ -368,23 +363,6 @@ class dbstats:
 			if server_system.has_key(tuning):
 				server_system_tunings[tuning] = server_system[tuning]
 
-		# Then the server app tunings
-		# FIXME: ait-get-sysinfo.py should get this too.
-		
-		# Only problem is that while the server keeps running and thus
-		# we can query its system tunings from /proc, the client usually
-		# finishes, so we would have to do this _while_ the test is being
-		# performed, on the client, so perhaps we should just start it in
-		# background, when it would start querying /proc periodically till
-		# it finds the client (or server, for that matter) running, when
-		# it does all the data gathering.
-
-		server_system_tunings["server_rtprio"] = pfs.get_rtprios(server_process_name)
-		server = pfs.find_by_name(server_process_name)
-		server_system_tunings["server_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(server[0]),
-											  int(server_system["nr_cpus"])), "%x")
-		server_system_tunings["server_sched"] = schedutils.schedstr(schedutils.get_scheduler(server[0]))
-
 		system_tunings_id = self.get_dict_table_id("system_tunings", server_system_tunings)
 		if not system_tunings_id:
 			self.create_dict_table_id("system_tunings", server_system_tunings)
@@ -394,17 +372,8 @@ class dbstats:
 		# libc, etc):
 		software_versions = {}
 		software_versions["kernel_release"] = server_system["kernel_release"]
-
-		# Default: libc statically linked
-		# See the FIXME above, ait-get-sysinfo should as well see what is the libc being
-		# used by the client.
-		software_versions["libc"] = None
-		# Discover which libc is being used by the server process
-		smaps_server = procfs.smaps(server[0])
-		if smaps_server:
-			libc = smaps_server.find_by_name_fragment("/libc-")
-			if libc:
-				software_versions["libc"] = libc[0].name
+		if server_system.has_key("libc"):
+			software_versions["libc"] = server_system["libc"]
 
 		software_versions_id = self.get_dict_table_id("software_versions", software_versions)
 		if not software_versions_id:
