@@ -216,7 +216,7 @@ def get_report_info(db, report, metric):
 def get_common_columns(results, columns):
 	common_columns = []
 	for column_index in range(len(columns)):
-		if len(list(set([result["tunings"][column_index] for result in results]))) == 1:
+		if len(list(set([result["system_tunings"][column_index] for result in results]))) == 1:
 			common_columns.append(column_index)
 
 	return common_columns
@@ -240,9 +240,9 @@ def create_html(db, ref, others):
 <img src="%s_%s.png">
 ''' % ([ref["report"]] + [o["report"] for o in others], prefix, metrics[0]))
 
-	ref["tunings"] = db.get_tunings_for_report(ref["report"])
+	ref["system_tunings"] = db.get_system_tunings_for_report(ref["report"])
 	for other in others:
-		other["tunings"] = db.get_tunings_for_report(other["report"])
+		other["system_tunings"] = db.get_system_tunings_for_report(other["report"])
 	
 	columns = [column[0] for column in db.cursor.description]
 	common_columns = get_common_columns([ ref, ] + others, columns)
@@ -261,7 +261,7 @@ def create_html(db, ref, others):
 	color_index += 1
 	for field in range(len(columns)):
 		if field not in common_columns:
-			f.write("<td>%s</td>" % ref["tunings"][field])
+			f.write("<td>%s</td>" % ref["system_tunings"][field])
 
 	for other in others:
 		f.write('</tr><tr>')
@@ -271,7 +271,7 @@ def create_html(db, ref, others):
 		color_index += 1
 		for field in range(len(columns)):
 			if field not in common_columns:
-				f.write("<td>%s</td>" % other["tunings"][field])
+				f.write("<td>%s</td>" % other["system_tunings"][field])
 
 	f.write('</tr><tr></table>')
 
@@ -280,7 +280,7 @@ def create_html(db, ref, others):
 		f.write("<th>%s</th>" % columns[column].replace("_", "<br>"))
 	f.write('</tr><tr>')
 	for column in common_columns:
-		f.write("<td>%s</td>" % ref["tunings"][column])
+		f.write("<td>%s</td>" % ref["system_tunings"][column])
 		
 	f.write("</tr></table>")
 	for metric in metrics[1:]:

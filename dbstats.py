@@ -91,35 +91,35 @@ class dbstats:
 		self.create_tables()
 
 	def create_tables(self):
-		tunings_columns = [ ( "tso", "text" ),
-				    ( "ufo", "text" ),
-				    ( "softirq_net_tx_prio", "text" ),
-				    ( "softirq_net_rx_prio", "text" ),
-				    ( "server_rtprio", "text" ),
-				    ( "irqbalance", "text" ),
-				    ( "server_affinity", "text" ),
-				    ( "server_sched", "text" ),
-				    ( "isolcpus", "text" ),
-				    ( "nic_kthread_affinities", "text" ),
-				    ( "nic_kthread_rtprios", "text" ),
-				    ( "oprofile", "text" ),
-				    ( "systemtap", "text" ),
-				    ( "maxcpus", "text" ),
-				    ( "vsyscall64", "text" ),
-				    ( "futex_performance_hack", "text" ),
-				    ( "idle", "text" ),
-				    ( "lock_stat", "text" ) ]
-		tunings_columns.sort()
-		query = dbutil_create_text_table_query("tunings", tunings_columns)
+		system_tunings_columns = [ ( "tso", "text" ),
+					    ( "ufo", "text" ),
+					    ( "softirq_net_tx_prio", "text" ),
+					    ( "softirq_net_rx_prio", "text" ),
+					    ( "server_rtprio", "text" ),
+					    ( "irqbalance", "text" ),
+					    ( "server_affinity", "text" ),
+					    ( "server_sched", "text" ),
+					    ( "isolcpus", "text" ),
+					    ( "nic_kthread_affinities", "text" ),
+					    ( "nic_kthread_rtprios", "text" ),
+					    ( "oprofile", "text" ),
+					    ( "systemtap", "text" ),
+					    ( "maxcpus", "text" ),
+					    ( "vsyscall64", "text" ),
+					    ( "futex_performance_hack", "text" ),
+					    ( "idle", "text" ),
+					    ( "lock_stat", "text" ) ]
+		system_tunings_columns.sort()
+		query = dbutil_create_text_table_query("system_tunings", system_tunings_columns)
 		try:
 			self.cursor.execute(query)
 		except:
-			old_tunings_columns = dbutils_get_columns(self.cursor, "tunings")
-			if [ a[0] for a in tunings_columns ] != old_tunings_columns:
+			old_tunings_columns = dbutils_get_columns(self.cursor, "system_tunings")
+			if [ a[0] for a in system_tunings_columns ] != old_tunings_columns:
 				dbutils_add_missing_text_columns(self.cursor,
-								 "tunings",
+								 "system_tunings",
 								 old_tunings_columns,
-								 tunings_columns)
+								 system_tunings_columns)
 
 		try:
 			self.cursor.execute('''
@@ -153,7 +153,7 @@ class dbstats:
 		try:
 			self.cursor.execute('''
 				create table environment (machine int,
-							  tunings int,
+							  system_tunings int,
 							  software_versions int)
 			''')
 		except:
@@ -281,7 +281,7 @@ class dbstats:
 		self.cursor.execute('''
 			select rowid from environment
 				     where machine = %d and
-					   tunings = %d and
+					   system_tunings = %d and
 					   software_versions = %d
 			       ''' % parms)
 		result = self.cursor.fetchone()
@@ -291,7 +291,7 @@ class dbstats:
 
 	def create_env_id(self, parms):
 		self.cursor.execute('''
-			insert into environment ( machine, tunings,
+			insert into environment ( machine, system_tunings,
 						  software_versions )
 					 values ( %d, %d, %d )
 			       ''' % parms)
@@ -366,19 +366,19 @@ class dbstats:
 			return results[0]
 		return None
 
-	def get_tunings_for_report(self, report):
+	def get_system_tunings_for_report(self, report):
 		self.cursor.execute('''
 					select r.env,
-					       e.tunings,
+					       e.system_tunings,
 					       s.kernel_release,
 					       s.libc,
 					       t.*
 					  from report r,
 					       environment e,
-					       tunings t,
+					       system_tunings t,
 					       software_versions s
 					  where r.env = e.rowid and
-						e.tunings = t.rowid and
+						e.system_tunings = t.rowid and
 						e.software_versions = s.rowid and
 						r.rowid = %d
 				  ''' % report)
@@ -412,70 +412,70 @@ class dbstats:
 			self.create_client_machine_id(client_machine)		
 			client_machine_id = self.get_client_machine_id(client_machine)
 
-		tunings = {}
+		system_tunings = {}
 
-		tunings["tso"] = get_tso_state()
-		tunings["ufo"] = get_ufo_state()
-		tunings["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-tx")
-		tunings["softirq_net_rx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-rx")
-		tunings["server_rtprio"] = pfs.get_rtprios(server_process_name)
+		system_tunings["tso"] = get_tso_state()
+		system_tunings["ufo"] = get_ufo_state()
+		system_tunings["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-tx")
+		system_tunings["softirq_net_rx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-rx")
+		system_tunings["server_rtprio"] = pfs.get_rtprios(server_process_name)
 
-		tunings["irqbalance"] = 0
+		system_tunings["irqbalance"] = 0
 		if pfs.find_by_name("irqbalance"):
-			tunings["irqbalance"] = 1
+			system_tunings["irqbalance"] = 1
 
-		tunings["oprofile"] = 0
+		system_tunings["oprofile"] = 0
 		if pfs.find_by_name("oprofiled"):
-			tunings["oprofile"] = 1
+			system_tunings["oprofile"] = 1
 
-		tunings["systemtap"] = 0
+		system_tunings["systemtap"] = 0
 		if pfs.find_by_name("staprun"):
-			tunings["systemtap"] = 1
+			system_tunings["systemtap"] = 1
 
 		server = pfs.find_by_name(server_process_name)
-		tunings["server_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(server[0]), irqs.nr_cpus), "%x")
-		tunings["server_sched"] = schedutils.schedstr(schedutils.get_scheduler(server[0]))
+		system_tunings["server_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(server[0]), irqs.nr_cpus), "%x")
+		system_tunings["server_sched"] = schedutils.schedstr(schedutils.get_scheduler(server[0]))
 
 		if kcmd.options.has_key("isolcpus"):
-			tunings["isolcpus"] = kcmd.options["isolcpus"]
+			system_tunings["isolcpus"] = kcmd.options["isolcpus"]
 		elif kcmd.options.has_key("default_affinity"):
-			tunings["isolcpus"] = "da:%s" % kcmd.options["default_affinity"]
+			system_tunings["isolcpus"] = "da:%s" % kcmd.options["default_affinity"]
 		else:
-			tunings["isolcpus"] = None
+			system_tunings["isolcpus"] = None
 
-		tunings["maxcpus"] = None
+		system_tunings["maxcpus"] = None
 		if kcmd.options.has_key("maxcpus"):
-			tunings["maxcpus"] = kcmd.options["maxcpus"]
+			system_tunings["maxcpus"] = kcmd.options["maxcpus"]
 
-		tunings["nic_kthread_affinities"] = get_nic_kthread_affinities(irqs)
-		tunings["nic_kthread_rtprios"] = get_nic_kthread_rtprios(irqs, pfs)
+		system_tunings["nic_kthread_affinities"] = get_nic_kthread_affinities(irqs)
+		system_tunings["nic_kthread_rtprios"] = get_nic_kthread_rtprios(irqs, pfs)
 
-		tunings["vsyscall64"] = None
+		system_tunings["vsyscall64"] = None
 		try:
 			f = file("/proc/sys/kernel/vsyscall64")
-			tunings["vsyscall64"] = int(f.readline())
+			system_tunings["vsyscall64"] = int(f.readline())
 			f.close()
 		except:
 			pass
 
-		tunings["futex_performance_hack"] = None
+		system_tunings["futex_performance_hack"] = None
 		try:
 			f = file("/proc/sys/kernel/futex_performance_hack")
-			tunings["futex_performance_hack"] = int(f.readline())
+			system_tunings["futex_performance_hack"] = int(f.readline())
 			f.close()
 		except:
 			pass
 
-		tunings["idle"] = None
+		system_tunings["idle"] = None
 		if kcmd.options.has_key("idle"):
-			tunings["idle"] = kcmd.options["idle"]
+			system_tunings["idle"] = kcmd.options["idle"]
 
-		tunings["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
+		system_tunings["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
 
-		tunings_id = self.get_dict_table_id("tunings", tunings)
-		if not tunings_id:
-			self.create_dict_table_id("tunings", tunings)
-			tunings_id = self.get_dict_table_id("tunings", tunings)
+		system_tunings_id = self.get_dict_table_id("system_tunings", system_tunings)
+		if not system_tunings_id:
+			self.create_dict_table_id("system_tunings", system_tunings)
+			system_tunings_id = self.get_dict_table_id("system_tunings", system_tunings)
 
 		# Collect the versions of relevant system components (kernel,
 		# libc, etc):
@@ -497,8 +497,8 @@ class dbstats:
 			software_versions_id = self.get_dict_table_id("software_versions",
 								      software_versions)
 		
-		# machine, tunings_id, kernel_release
-		server_env_parms = (machine, tunings_id, software_versions_id)
+		# machine, system_tunings_id, kernel_release
+		server_env_parms = (machine, system_tunings_id, software_versions_id)
 		server_env_id = self.get_env_id(server_env_parms)
 
 		ctime = os.stat(report).st_ctime

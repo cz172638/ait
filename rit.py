@@ -87,7 +87,7 @@ def get_latency_per_rate_metric(db, rate, metric, server, client):
 	db.cursor.execute('''
 				select distinct res.report,
 				       rep.env,
-				       e.tunings,
+				       e.system_tunings,
 				       s.kernel_release,
 				       res.value,
 				       t.*,
@@ -97,14 +97,14 @@ def get_latency_per_rate_metric(db, rate, metric, server, client):
 				       environment e,
 				       machine m,
 				       client_machine client,
-				       tunings t,
+				       system_tunings t,
 				       software_versions s
 				  where res.report = rep.rowid and
 				  	rep.env = e.rowid and
 					rep.client_env = client.rowid and
 					e.machine = m.rowid and
 					e.software_versions = s.rowid and
-					e.tunings = t.rowid and
+					e.system_tunings = t.rowid and
 					res.rate = %d and
 					m.nodename = "%s" and
 					client.nodename = "%s"
@@ -137,7 +137,7 @@ def print_rate(db, rate, server, client):
 
 		columns = [column[0] for column in db.cursor.description]
 		common_columns = get_common_columns(results, columns)
-		print "Shared tunings:"
+		print "Shared System tunings:"
 		for column_index in common_columns:
 			value = results[0][column_index]
 			if value:
