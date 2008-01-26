@@ -22,7 +22,7 @@ class latencies_per_rate_report:
 		f.close()
 
 if __name__ == '__main__':
-	import sys
+	import sys, os
 
 	appname = sys.argv[1]
 	server_process_name = sys.argv[2]
@@ -42,3 +42,7 @@ if __name__ == '__main__':
 		for rate in r.rates.keys():
 			metric_rates[rate] = r.rates[rate][metric]
 		db.insert_latency_per_rate(metrics[metric], metric_rates)
+
+	if os.access("/proc/lock_stat", os.F_OK) and \
+	   os.access("lock_stat/last", os.F_OK):
+	   	os.rename("lock_stat/last", "lock_stat/%d.txt" % db.report)
