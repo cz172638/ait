@@ -25,9 +25,9 @@ if __name__ == '__main__':
 	import sys, os
 
 	appname = sys.argv[1]
-	client_machine = sys.argv[3]
-	server_machine = sys.argv[4]
-	report = sys.argv[5]
+	client_machine = sys.argv[2]
+	server_machine = sys.argv[3]
+	report = sys.argv[4]
 
 	db = dbstats(appname)
 
