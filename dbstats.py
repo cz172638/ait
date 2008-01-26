@@ -124,9 +124,6 @@ class dbstats:
 			pass
 
 		# FIXME rename 'env' to 'server_env'
-		# For now client_env is an index into the 'client_machine' table,
-		# but should be an index into the environment table, with
-		# client environment being collected in ait.sh
 		try:
 			self.cursor.execute('''
 				create table report (env int,
@@ -155,12 +152,6 @@ class dbstats:
 		except:
 			pass
 
-		try:
-			self.cursor.execute('''
-				create table client_machine (nodename text)
-			''')
-		except:
-			pass
 		self.conn.commit()
 
 	def get_dict_table_id(self, table, parms):
@@ -221,23 +212,6 @@ class dbstats:
 		self.cursor.execute('''
 			insert into machine ( nodename, hw )
 				     values ("%s", %d )
-			       ''' % parms)
-		self.conn.commit()
-
-	def get_client_machine_id(self, parms):
-		self.cursor.execute('''
-			select rowid from client_machine
-				     where nodename = "%s"
-			       ''' % parms)
-		result = self.cursor.fetchone()
-		if result:
-			return result[0]
-		return None
-
-	def create_client_machine_id(self, parms):
-		self.cursor.execute('''
-			insert into client_machine ( nodename )
-					    values ("%s" )
 			       ''' % parms)
 		self.conn.commit()
 
@@ -348,35 +322,43 @@ class dbstats:
 				  ''' % report)
 		return self.cursor.fetchone()
 
+	def machine_hardware_id(self, system):
+		machine_hardware = (system["arch"],
+				    system["vendor_id"],
+				    system["cpu_model"],
+				    int(system["nr_cpus"]))
+		machine_hardware_id = self.get_machine_hardware_id(machine_hardware)
+		if not machine_hardware_id:
+			self.create_machine_hardware_id(machine_hardware)
+			machine_hardware_id = self.get_machine_hardware_id(machine_hardware)
+
+		return machine_hardware_id
+
+	def machine_id(self, system, machine_hardware_id):
+		machine = (system["nodename"], machine_hardware_id)
+		machine_id = self.get_machine_id(machine)
+		if not machine_id:
+			self.create_machine_id(machine)
+			machine_id = self.get_machine_id(machine)
+
+		return machine_id
+
 	def setreport(self, report, server_process_name,
 		      client_machine, server_machine):
 		pfs = procfs.stats()
 
-		# Load the server hardware info from the data collected
-		# by ait-get-sysinfo.py
+		# Load the client and server hardware info from the data
+		# collected by ait-get-sysinfo.py
+		client_system = get_sysinfo_dict(client_machine)
 		server_system = get_sysinfo_dict(server_machine)
 
-		# See if we already have this type of machine in our DB
-		server_machine_hardware = (server_system["arch"],
-					   server_system["vendor_id"],
-					   server_system["cpu_model"],
-					   int(server_system["nr_cpus"]))
-		server_machine_hardware_id = self.get_machine_hardware_id(server_machine_hardware)
-		if not server_machine_hardware_id:
-			self.create_machine_hardware_id(server_machine_hardware)
-			server_machine_hardware_id = self.get_machine_hardware_id(server_machine_hardware)
+		# Get the hardware ID for the client and server machines
+		client_machine_hardware_id = self.machine_hardware_id(client_system)
+		server_machine_hardware_id = self.machine_hardware_id(server_system)
 		
-		# Now check if we already have this specific machine on our DB
-		server_machine = (server_system["nodename"], server_machine_hardware_id)
-		server_machine_id = self.get_machine_id(server_machine)
-		if not server_machine_id:
-			self.create_machine_id(server_machine)
-			server_machine_id = self.get_machine_id(server_machine)
-
-		client_machine_id = self.get_client_machine_id(client_machine)
-		if not client_machine_id:
-			self.create_client_machine_id(client_machine)		
-			client_machine_id = self.get_client_machine_id(client_machine)
+		# Get the machine ID for the client and server machines
+		client_machine_id = self.machine_id(client_system, client_machine_hardware_id)
+		server_machine_id = self.machine_id(server_system, server_machine_hardware_id)
 
 		# Find the server system tunings id in the DB
 		server_system_tunings = {}

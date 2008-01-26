@@ -15,14 +15,14 @@ def get_rates(db, server, client):
 				  from latency_per_rate_avg res,
 				       report rep,
 				       environment e,
-				       machine m,
-				       client_machine client
+				       machine server_machine,
+				       machine client_machine
 				  where res.report = rep.rowid and
 				  	rep.env = e.rowid and
-				  	rep.client_env = client.rowid and
-					e.machine = m.rowid and
-					m.nodename = "%s" and
-					client.nodename = "%s"
+					e.machine = server_machine.rowid and
+				  	rep.client_env = client_machine.rowid and
+					server_machine.nodename = "%s" and
+					client_machine.nodename = "%s"
 				  order by res.rate
 			  ''' % (server, client))
 	results = db.cursor.fetchall()
@@ -36,16 +36,16 @@ def get_kernel_releases(db, server, client):
 				  from latency_per_rate_avg res,
 				       report rep,
 				       environment e,
-				       client_machine client,
-				       machine m,
+				       machine server_machine,
+				       machine client_machine,
 				       software_versions s
 				  where res.report = rep.rowid and
 				  	rep.env = e.rowid and
-				  	rep.client_env = client.rowid and
-					e.machine = m.rowid and
+					e.machine = server_machine.rowid and
+				  	rep.client_env = client_machine.rowid and
 					e.software_versions = s.rowid and
-					m.nodename = "%s" and
-					client.nodename = "%s"
+					server_machine.nodename = "%s" and
+					client_machine.nodename = "%s"
 				  order by res.rate
 			  ''' % (server, client))
 	results = db.cursor.fetchall()
@@ -59,16 +59,16 @@ def get_kernel_max_rate(db, kernel, server, client):
 				  from latency_per_rate_avg res,
 				       report rep,
 				       environment e,
-				       client_machine client,
-				       machine m,
+				       machine server_machine,
+				       machine client_machine,
 				       software_versions s
 				  where res.report = rep.rowid and
 				  	rep.env = e.rowid and
-				  	rep.client_env = client.rowid and
-					e.machine = m.rowid and
+					e.machine = server_machine.rowid and
+				  	rep.client_env = client_machine.rowid and
 					e.software_versions = s.rowid and
-					m.nodename = "%s" and
-					client.nodename = "%s" and
+					server_machine.nodename = "%s" and
+					client_machine.nodename = "%s" and
 					s.kernel_release = "%s"
 			  ''' % (server, client, kernel))
 	result = db.cursor.fetchone()
@@ -91,23 +91,23 @@ def get_latency_per_rate_metric(db, rate, metric, server, client):
 				       s.kernel_release,
 				       res.value,
 				       t.*,
-				       client.nodename
+				       client_machine.nodename
 				  from latency_per_rate_%s res,
 				       report rep,
 				       environment e,
-				       machine m,
-				       client_machine client,
+				       machine server_machine,
+				       machine client_machine,
 				       system_tunings t,
 				       software_versions s
 				  where res.report = rep.rowid and
 				  	rep.env = e.rowid and
-					rep.client_env = client.rowid and
-					e.machine = m.rowid and
+					e.machine = server_machine.rowid and
+					rep.client_env = client_machine.rowid and
 					e.software_versions = s.rowid and
 					e.system_tunings = t.rowid and
 					res.rate = %d and
-					m.nodename = "%s" and
-					client.nodename = "%s"
+					server_machine.nodename = "%s" and
+					client_machine.nodename = "%s"
 				  order by res.value
 				  limit 10
 			  ''' % (metric, rate, server, client))
@@ -188,6 +188,9 @@ if __name__ == '__main__':
 	print "  max rate: " + str(db.get_max_rate_for_report(latest_report)) + "\n"
 
 	kernels = get_kernel_releases(db, server, client)
+	if not kernels:
+		print "no reports found for this server & client"
+		sys.exit(1)
 	kernels.sort()
 	width = max([len(i) for i in kernels])
 	mask = "%%-%ds: %%d" % width
