@@ -18,7 +18,7 @@ class latencies_per_rate_report:
 			fields = line.strip().split(',')
 			rate = int(fields[0])
 
-			self.rates[rate] = tuple([float(i) for i in fields])
+			self.rates[rate] = tuple([float(i) for i in fields[1:]])
 		f.close()
 
 if __name__ == '__main__':
