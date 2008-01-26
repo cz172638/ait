@@ -7,7 +7,6 @@ try:
 except:
 	from sqlite import connect as sqlite3_connect
 
-import ethtool
 import schedutils
 import os, sys
 import procfs
@@ -33,55 +32,20 @@ def dbutils_add_missing_text_columns(cursor, table, old_columns, columns):
 									    column[0],
 									    column[1]))
 
-def get_tso_state():
-	state=""
-	for iface in ethtool.get_devices():
-		try:
-			state += "%s=%d," % (iface, ethtool.get_tso(iface))
-		except:
-			pass
-	state = state.strip(",")
-	return state
-
-def get_ufo_state():
-	state=""
-	# UFO may not be present on this kernel and then we get an exception
-	try:
-		for iface in ethtool.get_devices():
-			state += "%s=%d," % (iface, ethtool.get_ufo(iface))
-	except:
-		pass
-	state = state.strip(",")
-
-	return state
-
-def get_nic_kthread_affinities(irqs):
-	state=""
-	for iface in ethtool.get_devices():
-		irq = irqs.find_by_user(iface)
-		if not irq:
+def get_sysinfo_dict(system):
+	result = {}
+	f = file(system + ".sysinfo")
+	for line in f.readlines():
+		line = line.strip()
+		if len(line) == 0 or line[0] == "#":
 			continue
-		# affinity comes from /proc/irq/N/smp_affinities, that
-		# needs root priviledges
-		try:
-			state += "%s=%s;" % (iface, utilist.csv(utilist.hexbitmask(irqs[irq]["affinity"], irqs.nr_cpus), '%x'))
-		except:
-			pass
-	state = state.strip(";")
-	return state
-
-def get_nic_kthread_rtprios(irqs, ps):
-	state=""
-	for iface in ethtool.get_devices():
-		irq = irqs.find_by_user(iface)
-		if not irq:
-			continue
-		pids = ps.find_by_name("IRQ-%s" % irq)
-		if not pids:
-			continue
-		state += "%s=%s;" % (iface, ps[pids[0]]["stat"]["rt_priority"])
-	state = state.strip(";")
-	return state
+		# Make sure we cope with the separator being in the field value
+		# Ex.: "foo: bar:baz"
+		# Should produce result["foo"] = "bar:baz"
+		sep = line.index(":")
+		result[line[:sep]] = line[sep + 1:].strip()
+	f.close()
+	return result
 
 class dbstats:
 	def __init__(self, appname):
@@ -90,36 +54,36 @@ class dbstats:
 
 		self.create_tables()
 
+	system_tunings_columns = [ ( "tso", "text" ),
+				   ( "ufo", "text" ),
+				   ( "softirq_net_tx_prio", "text" ),
+				   ( "softirq_net_rx_prio", "text" ),
+				   ( "server_rtprio", "text" ),
+				   ( "irqbalance", "text" ),
+				   ( "server_affinity", "text" ),
+				   ( "server_sched", "text" ),
+				   ( "isolcpus", "text" ),
+				   ( "nic_kthread_affinities", "text" ),
+				   ( "nic_kthread_rtprios", "text" ),
+				   ( "oprofile", "text" ),
+				   ( "systemtap", "text" ),
+				   ( "maxcpus", "text" ),
+				   ( "vsyscall64", "text" ),
+				   ( "futex_performance_hack", "text" ),
+				   ( "idle", "text" ),
+				   ( "lock_stat", "text" ) ]
+
 	def create_tables(self):
-		system_tunings_columns = [ ( "tso", "text" ),
-					    ( "ufo", "text" ),
-					    ( "softirq_net_tx_prio", "text" ),
-					    ( "softirq_net_rx_prio", "text" ),
-					    ( "server_rtprio", "text" ),
-					    ( "irqbalance", "text" ),
-					    ( "server_affinity", "text" ),
-					    ( "server_sched", "text" ),
-					    ( "isolcpus", "text" ),
-					    ( "nic_kthread_affinities", "text" ),
-					    ( "nic_kthread_rtprios", "text" ),
-					    ( "oprofile", "text" ),
-					    ( "systemtap", "text" ),
-					    ( "maxcpus", "text" ),
-					    ( "vsyscall64", "text" ),
-					    ( "futex_performance_hack", "text" ),
-					    ( "idle", "text" ),
-					    ( "lock_stat", "text" ) ]
-		system_tunings_columns.sort()
-		query = dbutil_create_text_table_query("system_tunings", system_tunings_columns)
+		query = dbutil_create_text_table_query("system_tunings", self.system_tunings_columns)
 		try:
 			self.cursor.execute(query)
 		except:
 			old_tunings_columns = dbutils_get_columns(self.cursor, "system_tunings")
-			if [ a[0] for a in system_tunings_columns ] != old_tunings_columns:
+			if [ a[0] for a in self.system_tunings_columns ] != old_tunings_columns:
 				dbutils_add_missing_text_columns(self.cursor,
 								 "system_tunings",
 								 old_tunings_columns,
-								 system_tunings_columns)
+								 self.system_tunings_columns)
 
 		try:
 			self.cursor.execute('''
@@ -384,105 +348,74 @@ class dbstats:
 				  ''' % report)
 		return self.cursor.fetchone()
 
-	def setreport(self, report, server_process_name, client_machine):
+	def setreport(self, report, server_process_name,
+		      client_machine, server_machine):
 		pfs = procfs.stats()
-		kcmd = procfs.cmdline()
-		irqs = procfs.interrupts()
-		cpuinfo = procfs.cpuinfo()
-		uname = os.uname()
 
-		# arch, vendor, cpu_model, nr_cpus
-		machine_hardware_parms = (uname[4], cpuinfo["vendor_id"],
-					  cpuinfo["model name"],
-					  cpuinfo.nr_cpus)
-		machine_hardware = self.get_machine_hardware_id(machine_hardware_parms)
-		if not machine_hardware:
-			self.create_machine_hardware_id(machine_hardware_parms)
-			machine_hardware = self.get_machine_hardware_id(machine_hardware_parms)
+		# Load the server hardware info from the data collected
+		# by ait-get-sysinfo.py
+		server_system = get_sysinfo_dict(server_machine)
+
+		# See if we already have this type of machine in our DB
+		server_machine_hardware = (server_system["arch"],
+					   server_system["vendor_id"],
+					   server_system["cpu_model"],
+					   int(server_system["nr_cpus"]))
+		server_machine_hardware_id = self.get_machine_hardware_id(server_machine_hardware)
+		if not server_machine_hardware_id:
+			self.create_machine_hardware_id(server_machine_hardware)
+			server_machine_hardware_id = self.get_machine_hardware_id(server_machine_hardware)
 		
-		# nodename, hw
-		machine_parms = (uname[1], machine_hardware)
-		machine = self.get_machine_id(machine_parms)
-		if not machine:
-			self.create_machine_id(machine_parms)
-			machine = self.get_machine_id(machine_parms)
+		# Now check if we already have this specific machine on our DB
+		server_machine = (server_system["nodename"], server_machine_hardware_id)
+		server_machine_id = self.get_machine_id(server_machine)
+		if not server_machine_id:
+			self.create_machine_id(server_machine)
+			server_machine_id = self.get_machine_id(server_machine)
 
 		client_machine_id = self.get_client_machine_id(client_machine)
 		if not client_machine_id:
 			self.create_client_machine_id(client_machine)		
 			client_machine_id = self.get_client_machine_id(client_machine)
 
-		system_tunings = {}
+		# Find the server system tunings id in the DB
+		server_system_tunings = {}
 
-		system_tunings["tso"] = get_tso_state()
-		system_tunings["ufo"] = get_ufo_state()
-		system_tunings["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-tx")
-		system_tunings["softirq_net_rx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-rx")
-		system_tunings["server_rtprio"] = pfs.get_rtprios(server_process_name)
+		# First get the tunings collected by ait-get-sysinfo.py
+		for tuning in [ a[0] for a in self.system_tunings_columns ]:
+			if server_system.has_key(tuning):
+				server_system_tunings[tuning] = server_system[tuning]
 
-		system_tunings["irqbalance"] = 0
-		if pfs.find_by_name("irqbalance"):
-			system_tunings["irqbalance"] = 1
+		# Then the server app tunings
+		# FIXME: ait-get-sysinfo.py should get this too.
+		
+		# Only problem is that while the server keeps running and thus
+		# we can query its system tunings from /proc, the client usually
+		# finishes, so we would have to do this _while_ the test is being
+		# performed, on the client, so perhaps we should just start it in
+		# background, when it would start querying /proc periodically till
+		# it finds the client (or server, for that matter) running, when
+		# it does all the data gathering.
 
-		system_tunings["oprofile"] = 0
-		if pfs.find_by_name("oprofiled"):
-			system_tunings["oprofile"] = 1
-
-		system_tunings["systemtap"] = 0
-		if pfs.find_by_name("staprun"):
-			system_tunings["systemtap"] = 1
-
+		server_system_tunings["server_rtprio"] = pfs.get_rtprios(server_process_name)
 		server = pfs.find_by_name(server_process_name)
-		system_tunings["server_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(server[0]), irqs.nr_cpus), "%x")
-		system_tunings["server_sched"] = schedutils.schedstr(schedutils.get_scheduler(server[0]))
+		server_system_tunings["server_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(server[0]),
+											  int(server_system["nr_cpus"])), "%x")
+		server_system_tunings["server_sched"] = schedutils.schedstr(schedutils.get_scheduler(server[0]))
 
-		if kcmd.options.has_key("isolcpus"):
-			system_tunings["isolcpus"] = kcmd.options["isolcpus"]
-		elif kcmd.options.has_key("default_affinity"):
-			system_tunings["isolcpus"] = "da:%s" % kcmd.options["default_affinity"]
-		else:
-			system_tunings["isolcpus"] = None
-
-		system_tunings["maxcpus"] = None
-		if kcmd.options.has_key("maxcpus"):
-			system_tunings["maxcpus"] = kcmd.options["maxcpus"]
-
-		system_tunings["nic_kthread_affinities"] = get_nic_kthread_affinities(irqs)
-		system_tunings["nic_kthread_rtprios"] = get_nic_kthread_rtprios(irqs, pfs)
-
-		system_tunings["vsyscall64"] = None
-		try:
-			f = file("/proc/sys/kernel/vsyscall64")
-			system_tunings["vsyscall64"] = int(f.readline())
-			f.close()
-		except:
-			pass
-
-		system_tunings["futex_performance_hack"] = None
-		try:
-			f = file("/proc/sys/kernel/futex_performance_hack")
-			system_tunings["futex_performance_hack"] = int(f.readline())
-			f.close()
-		except:
-			pass
-
-		system_tunings["idle"] = None
-		if kcmd.options.has_key("idle"):
-			system_tunings["idle"] = kcmd.options["idle"]
-
-		system_tunings["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
-
-		system_tunings_id = self.get_dict_table_id("system_tunings", system_tunings)
+		system_tunings_id = self.get_dict_table_id("system_tunings", server_system_tunings)
 		if not system_tunings_id:
-			self.create_dict_table_id("system_tunings", system_tunings)
-			system_tunings_id = self.get_dict_table_id("system_tunings", system_tunings)
+			self.create_dict_table_id("system_tunings", server_system_tunings)
+			system_tunings_id = self.get_dict_table_id("system_tunings", server_system_tunings)
 
 		# Collect the versions of relevant system components (kernel,
 		# libc, etc):
 		software_versions = {}
-		software_versions["kernel_release"] = uname[2] 
+		software_versions["kernel_release"] = server_system["kernel_release"]
 
 		# Default: libc statically linked
+		# See the FIXME above, ait-get-sysinfo should as well see what is the libc being
+		# used by the client.
 		software_versions["libc"] = None
 		# Discover which libc is being used by the server process
 		smaps_server = procfs.smaps(server[0])
@@ -497,8 +430,8 @@ class dbstats:
 			software_versions_id = self.get_dict_table_id("software_versions",
 								      software_versions)
 		
-		# machine, system_tunings_id, kernel_release
-		server_env_parms = (machine, system_tunings_id, software_versions_id)
+		# server_machine_id, system_tunings_id, kernel_release
+		server_env_parms = (server_machine_id, system_tunings_id, software_versions_id)
 		server_env_id = self.get_env_id(server_env_parms)
 
 		ctime = os.stat(report).st_ctime

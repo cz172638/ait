@@ -1,0 +1,131 @@
+#! /usr/bin/python
+# -*- python -*-
+# -*- coding: utf-8 -*-
+
+import ethtool, os, procfs, schedutils
+
+def get_tso_state():
+	state=""
+	for iface in ethtool.get_devices():
+		try:
+			state += "%s=%d," % (iface, ethtool.get_tso(iface))
+		except:
+			pass
+	state = state.strip(",")
+	return state
+
+def get_ufo_state():
+	state=""
+	# UFO may not be present on this kernel and then we get an exception
+	try:
+		for iface in ethtool.get_devices():
+			state += "%s=%d," % (iface, ethtool.get_ufo(iface))
+	except:
+		pass
+	state = state.strip(",")
+
+	return state
+
+def get_nic_kthread_affinities(irqs):
+	state=""
+	for iface in ethtool.get_devices():
+		irq = irqs.find_by_user(iface)
+		if not irq:
+			continue
+		# affinity comes from /proc/irq/N/smp_affinities, that
+		# needs root priviledges
+		try:
+			state += "%s=%s;" % (iface, utilist.csv(utilist.hexbitmask(irqs[irq]["affinity"], irqs.nr_cpus), '%x'))
+		except:
+			pass
+	state = state.strip(";")
+	return state
+
+def get_nic_kthread_rtprios(irqs, ps):
+	state=""
+	for iface in ethtool.get_devices():
+		irq = irqs.find_by_user(iface)
+		if not irq:
+			continue
+		pids = ps.find_by_name("IRQ-%s" % irq)
+		if not pids:
+			continue
+		state += "%s=%s;" % (iface, ps[pids[0]]["stat"]["rt_priority"])
+	state = state.strip(";")
+	return state
+
+if __name__ == '__main__':
+
+	sysinfo = {}
+
+	pfs = procfs.stats()
+	kcmd = procfs.cmdline()
+	irqs = procfs.interrupts()
+	cpuinfo = procfs.cpuinfo()
+	uname = os.uname()
+
+	# arch, vendor, cpu_model, nr_cpus
+	sysinfo["nodename"] = uname[1]
+	sysinfo["arch"] = uname[4]
+	sysinfo["kernel_release"] = uname[2] 
+	sysinfo["vendor_id"] = cpuinfo["vendor_id"]
+	sysinfo["cpu_model"] = cpuinfo["model name"]
+	sysinfo["nr_cpus"] = cpuinfo.nr_cpus
+		
+	sysinfo["tso"] = get_tso_state()
+	sysinfo["ufo"] = get_ufo_state()
+	sysinfo["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-tx")
+	sysinfo["softirq_net_rx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-rx")
+
+	sysinfo["irqbalance"] = False
+	if pfs.find_by_name("irqbalance"):
+		sysinfo["irqbalance"] = True
+
+	sysinfo["oprofile"] = False
+	if pfs.find_by_name("oprofiled"):
+		sysinfo["oprofile"] = True
+
+	sysinfo["systemtap"] = False
+	if pfs.find_by_name("staprun"):
+		sysinfo["systemtap"] = True
+
+	if kcmd.options.has_key("isolcpus"):
+		sysinfo["isolcpus"] = kcmd.options["isolcpus"]
+	elif kcmd.options.has_key("default_affinity"):
+		sysinfo["isolcpus"] = "da:%s" % kcmd.options["default_affinity"]
+	else:
+		sysinfo["isolcpus"] = None
+
+	sysinfo["maxcpus"] = None
+	if kcmd.options.has_key("maxcpus"):
+		sysinfo["maxcpus"] = kcmd.options["maxcpus"]
+
+	sysinfo["nic_kthread_affinities"] = get_nic_kthread_affinities(irqs)
+	sysinfo["nic_kthread_rtprios"] = get_nic_kthread_rtprios(irqs, pfs)
+
+	sysinfo["vsyscall64"] = None
+	try:
+		f = file("/proc/sys/kernel/vsyscall64")
+		sysinfo["vsyscall64"] = int(f.readline())
+		f.close()
+	except:
+		pass
+
+	sysinfo["futex_performance_hack"] = None
+	try:
+		f = file("/proc/sys/kernel/futex_performance_hack")
+		sysinfo["futex_performance_hack"] = int(f.readline())
+		f.close()
+	except:
+		pass
+
+	sysinfo["idle"] = None
+	if kcmd.options.has_key("idle"):
+		sysinfo["idle"] = kcmd.options["idle"]
+
+	sysinfo["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
+
+	keys = sysinfo.keys()
+	keys.sort()
+	for key in keys:
+		print "%s: %s" % ( key, sysinfo[key] )
