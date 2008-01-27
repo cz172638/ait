@@ -128,23 +128,23 @@ if __name__ == '__main__':
 
 	app = pfs.find_by_name(app_process_name)
 	if app:
-		sysinfo["server_rtprio"] = pfs.get_rtprios(app_process_name)
-		sysinfo["server_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(app[0]),
+		sysinfo["app_rtprio"] = pfs.get_rtprios(app_process_name)
+		sysinfo["app_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(app[0]),
 												    int(sysinfo["nr_cpus"])), "%x")
-		sysinfo["server_sched"] = schedutils.schedstr(schedutils.get_scheduler(app[0]))
+		sysinfo["app_sched"] = schedutils.schedstr(schedutils.get_scheduler(app[0]))
 
 		# Default: libc statically linked
 		sysinfo["libc"] = None
-		# Discover which libc is being used by the server process
+		# Discover which libc is being used by the application
 		smaps = procfs.smaps(app[0])
 		if smaps:
 			libc = smaps.find_by_name_fragment("/libc-")
 			if libc:
 				sysinfo["libc"] = libc[0].name
 	else:
-		sysinfo["server_rtprio"] = None
-		sysinfo["server_affinity"] = None
-		sysinfo["server_sched"] = None
+		sysinfo["app_rtprio"] = None
+		sysinfo["app_affinity"] = None
+		sysinfo["app_sched"] = None
 
 	keys = sysinfo.keys()
 	keys.sort()
