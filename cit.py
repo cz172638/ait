@@ -35,6 +35,8 @@ if __name__ == '__main__':
 		print "report %s already in database" % report
 		sys.exit(1)
 
+	print "Adding report %s to the database" % db.report
+
 	r = latencies_per_rate_report("%s.cit" % report)
 	metrics = [ "min", "avg", "max", "dev" ]
 	for metric in range(len(metrics)):
