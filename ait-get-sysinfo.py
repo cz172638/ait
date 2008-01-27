@@ -90,16 +90,16 @@ if __name__ == '__main__':
 	if pfs.find_by_name("staprun"):
 		sysinfo["systemtap"] = True
 
-	if kcmd.options.has_key("isolcpus"):
-		sysinfo["isolcpus"] = kcmd.options["isolcpus"]
+	if kcmd.options.has_key("kcmd_isolcpus"):
+		sysinfo["kcmd_isolcpus"] = kcmd.options["kcmd_isolcpus"]
 	elif kcmd.options.has_key("default_affinity"):
-		sysinfo["isolcpus"] = "da:%s" % kcmd.options["default_affinity"]
+		sysinfo["kcmd_isolcpus"] = "da:%s" % kcmd.options["default_affinity"]
 	else:
-		sysinfo["isolcpus"] = None
+		sysinfo["kcmd_isolcpus"] = None
 
-	sysinfo["maxcpus"] = None
-	if kcmd.options.has_key("maxcpus"):
-		sysinfo["maxcpus"] = kcmd.options["maxcpus"]
+	sysinfo["kcmd_maxcpus"] = None
+	if kcmd.options.has_key("kcmd_maxcpus"):
+		sysinfo["kcmd_maxcpus"] = kcmd.options["kcmd_maxcpus"]
 
 	sysinfo["nic_kthread_affinities"] = get_nic_kthread_affinities(irqs)
 	sysinfo["nic_kthread_rtprios"] = get_nic_kthread_rtprios(irqs, pfs)
@@ -120,9 +120,9 @@ if __name__ == '__main__':
 	except:
 		pass
 
-	sysinfo["idle"] = None
-	if kcmd.options.has_key("idle"):
-		sysinfo["idle"] = kcmd.options["idle"]
+	sysinfo["kcmd_idle"] = None
+	if kcmd.options.has_key("kcmd_idle"):
+		sysinfo["kcmd_idle"] = kcmd.options["kcmd_idle"]
 
 	sysinfo["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
 

@@ -59,15 +59,15 @@ class dbstats:
 				   ( "irqbalance", "text" ),
 				   ( "app_affinity", "text" ),
 				   ( "app_sched", "text" ),
-				   ( "isolcpus", "text" ),
+				   ( "kcmd_isolcpus", "text" ),
 				   ( "nic_kthread_affinities", "text" ),
 				   ( "nic_kthread_rtprios", "text" ),
 				   ( "oprofile", "text" ),
 				   ( "systemtap", "text" ),
-				   ( "maxcpus", "text" ),
+				   ( "kcmd_maxcpus", "text" ),
 				   ( "vsyscall64", "text" ),
 				   ( "futex_performance_hack", "text" ),
-				   ( "idle", "text" ),
+				   ( "kcmd_idle", "text" ),
 				   ( "lock_stat", "text" ) ]
 
 	def create_tables(self):
