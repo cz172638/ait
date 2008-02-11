@@ -2,7 +2,7 @@
 # -*- python -*-
 # -*- coding: utf-8 -*-
 
-import ethtool, os, procfs, schedutils, sys, utilist
+import ethtool, os, procfs, schedutils, sys, sysctl, utilist
 
 def get_tso_state():
 	state=""
@@ -64,6 +64,7 @@ if __name__ == '__main__':
 	irqs = procfs.interrupts()
 	cpuinfo = procfs.cpuinfo()
 	uname = os.uname()
+	sysctl = sysctl.sysctl()
 
 	# arch, vendor, cpu_model, nr_cpus
 	sysinfo["nodename"] = uname[1]
@@ -145,6 +146,8 @@ if __name__ == '__main__':
 		sysinfo["app_rtprio"] = None
 		sysinfo["app_affinity"] = None
 		sysinfo["app_sched"] = None
+
+	sysinfo["tcp_congestion_control"] = sysctl["net.ipv4.tcp_congestion_control"]
 
 	keys = sysinfo.keys()
 	keys.sort()
