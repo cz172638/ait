@@ -2,8 +2,7 @@
 # -*- python -*-
 # -*- coding: utf-8 -*-
 
-import os
-import utilist
+import os, time, utilist
 
 class pidstats:
 	proc_stat_fields = [ "pid", "comm", "state", "ppid", "pgrp", "session",
@@ -290,6 +289,61 @@ class smaps:
 				
 		return result
 
+class cpustat:
+	def __init__(self, fields):
+		self.name = fields[0]
+		(self.user,
+		 self.nice,
+		 self.system,
+		 self.idle,
+		 self.iowait,
+		 self.irq,
+		 self.softirq,
+		 self.steal) = [int(i) for i in fields[1:9]]
+		if len(fields) > 8:
+			self.guest = int(fields[8])
+
+class cpusstats:
+	def __init__(self):
+		self.entries = []
+		self.time = None
+		self.hertz = os.sysconf(2)
+		self.reload()
+
+	def __iter__(self):
+		return iter(self.entries)
+
+	def __getitem__(self, key):
+		return self.entries[key]
+
+	def __len__(self):
+		return len(self.entries)
+
+	def reload(self):
+		last_entries = self.entries
+		self.entries = []
+		f = file("/proc/stat")
+		for line in f.readlines():
+			fields = line.strip().split()
+			if fields[0][:3].lower() != "cpu":
+				continue
+			self.entries.append(cpustat(fields))
+		f.close()
+		last_time = self.time
+		self.time = time.time()
+		if len(last_entries) > 0:
+			delta_sec = self.time - last_time
+			interval_hz = delta_sec * self.hertz
+			for cpu in range(len(last_entries)):
+				curr = self.entries[cpu]
+				prev = last_entries[cpu]
+				delta = (curr.user - prev.user) + \
+					(curr.nice - prev.nice) + \
+					(curr.system - prev.system)
+				curr.usage = (delta / interval_hz) * 100
+				if curr.usage > 100:
+					curr.usage = 100
+
 if __name__ == '__main__':
 	import sys
 
@@ -317,3 +371,11 @@ if __name__ == '__main__':
 
 	ps = pidstats()
 	print ps[1]
+
+	cs = cpusstats()
+	while True:
+		time.sleep(1)
+		cs.reload()
+		for cpu in cs:
+			print "%s: %d" % (cpu.name, cpu.usage)
+		print "-" * 10
