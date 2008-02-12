@@ -5,7 +5,7 @@
 import os
 import utilist
 
-class stats:
+class pidstats:
 	proc_stat_fields = [ "pid", "comm", "state", "ppid", "pgrp", "session",
 			     "tty_nr", "tpgid", "flags", "minflt", "cminflt",
 			     "majflt", "cmajflt", "utime", "stime", "cutime",
@@ -256,6 +256,8 @@ class smaps:
 		lines = []
 		if not line:
 			line = f.readline().strip()
+		if not line:
+			return
 		lines.append(line)
 		while True:
 			line = f.readline()
@@ -312,3 +314,6 @@ if __name__ == '__main__':
 	print "-" * 40
 	for a in s.find_by_name_fragment(sys.argv[2]):
 		print a["Size"]
+
+	ps = pidstats()
+	print ps[1]

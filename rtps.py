@@ -53,7 +53,7 @@ def show(ps, cpuinfo, irqs):
 
 if __name__ == '__main__':
 
-	ps = procfs.stats()
+	ps = procfs.pidstats()
 	cpuinfo = procfs.cpuinfo()
 	irqs = procfs.interrupts()
 

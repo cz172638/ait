@@ -66,7 +66,7 @@ def show(irqs, ps):
 if __name__ == '__main__':
 
 	irqs = procfs.interrupts()
-	ps = procfs.stats()
+	ps = procfs.pidstats()
 
 	show_header()
 	show(irqs, ps)

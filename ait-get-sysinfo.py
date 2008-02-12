@@ -59,7 +59,7 @@ if __name__ == '__main__':
 	app_process_name = sys.argv[1]
 	sysinfo = {}
 
-	pfs = procfs.stats()
+	pfs = procfs.pidstats()
 	kcmd = procfs.cmdline()
 	irqs = procfs.interrupts()
 	cpuinfo = procfs.cpuinfo()
