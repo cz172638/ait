@@ -27,6 +27,9 @@ class pidstats:
 	def keys(self):
 		return self.processes.keys()
 
+	def has_key(self, key):
+		return self.processes.has_key(key)
+
 	def read_stat_entry(self, pid):
 		f = open("/proc/%d/stat" % pid)
 		tags = {}
