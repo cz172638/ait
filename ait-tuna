@@ -1,0 +1,272 @@
+#! /usr/bin/python
+# -*- python -*-
+# -*- coding: utf-8 -*-
+
+import pygtk
+pygtk.require("2.0")
+
+import ethtool, gtk, gobject, os, procfs, schedutils, sys, utilist
+import gtk.glade
+
+class cpuview:
+
+	( COL_FILTER, COL_CPU, COL_USAGE ) = range(3)
+
+	def __init__(self, treeview):
+		self.cpustats = procfs.cpusstats()
+		self.treeview = treeview
+		self.list_store = gtk.ListStore(gobject.TYPE_BOOLEAN,
+						gobject.TYPE_UINT,
+						gobject.TYPE_UINT)
+		self.treeview.set_model(self.list_store)
+		
+		model = self.treeview.get_model()
+
+		# Filter column
+		renderer = gtk.CellRendererToggle()
+		renderer.connect('toggled', self.filter_toggled, model)
+		column = gtk.TreeViewColumn('Filter', renderer, active = self.COL_FILTER)
+		self.treeview.append_column(column)
+
+		# CPU# column
+		column = gtk.TreeViewColumn('CPU', gtk.CellRendererText(),
+					    text = self.COL_CPU)
+		self.treeview.append_column(column)
+
+		# CPU usage column
+		column = gtk.TreeViewColumn('Usage', gtk.CellRendererProgress(),
+					    text = self.COL_USAGE, value = self.COL_USAGE)
+		self.treeview.append_column(column)
+
+		self.refresh()
+		self.timer = gobject.timeout_add(3000, self.refresh)
+
+	def filter_toggled(self, cell, path, model):
+		# get toggled iter
+		iter = model.get_iter((int(path),))
+		filtered = model.get_value(iter, self.COL_FILTER)
+
+		# do something with the value
+		filtered = not filtered
+
+		# set new value
+		model.set(iter, self.COL_FILTER, filtered)
+
+	def refresh(self):
+		self.list_store.clear()
+		self.cpustats.reload()
+		for cpunr in range(len(self.cpustats) - 1):
+			cpu = self.list_store.append()
+			usage = self.cpustats[cpunr + 1].usage
+			self.list_store.set(cpu, self.COL_FILTER, True,
+						 self.COL_CPU, cpunr,
+						 self.COL_USAGE, int(usage))
+		self.treeview.show_all()
+		return True
+
+class irqview:
+
+	( COL_NUM, COL_PID, COL_POL, COL_PRI, COL_AFF, COL_EVENTS, COL_NAME ) = range(7)
+	labels = [ "IRQ", "PID", "Policy", "Priority", "Affinity",
+		   "Events", "Name" ]
+
+	def __init__(self, treeview, irqs):
+		self.irqs = irqs
+		self.treeview = treeview
+		self.list_store = gtk.ListStore(gobject.TYPE_UINT,
+				      		gobject.TYPE_INT,
+				      		gobject.TYPE_STRING,
+				      		gobject.TYPE_INT,
+				      		gobject.TYPE_STRING,
+				      		gobject.TYPE_UINT,
+				      		gobject.TYPE_STRING)
+		self.treeview.set_model(self.list_store)
+		
+		model = self.treeview.get_model()
+		renderer = gtk.CellRendererText()
+
+		for col in range(len(self.labels)):
+			column = gtk.TreeViewColumn(self.labels[col], renderer, text = col)
+			column.set_sort_column_id(col)
+			self.treeview.append_column(column)
+
+	def show(self, ps):
+		self.list_store.clear()
+
+		irq_list = []
+		for sirq in self.irqs.keys():
+			try:
+				irq_list.append(int(sirq))
+			except:
+				continue
+
+		nics = ethtool.get_active_devices()
+
+		irq_list.sort()
+		for irqnr in irq_list:
+			info = self.list_store.append()
+			irq = self.irqs[irqnr]
+			users = irq["users"]
+			for u in users:
+				if u in nics:
+					users[users.index(u)] = "%s(%s)" % (u, ethtool.get_module(u))
+
+			pids = ps.find_by_name("IRQ-%d" % irqnr)
+			if pids:
+				pid = pids[0]
+				prio = int(ps[pid]["stat"]["rt_priority"])
+				sched = schedutils.schedstr(schedutils.get_scheduler(pid))[6:]
+			else:
+				sched = ""
+				pid = -1
+				prio = -1
+
+			irq_affinity_list = irq["affinity"]
+			try:
+				if len(irq_affinity_list) <= 4:
+					irq_affinity = ("%s" % irq_affinity_list)[1:-1].replace(" ", "")
+				else:
+					irq_affinity = utilist.csv(utilist.hexbitmask(irq_affinity_list,
+										      self.irqs.nr_cpus), '0x%x')
+			except:
+				# needs root prio to read /proc/irq/<NUM>/smp_affinity
+				irq_affinity = ""
+
+			events = reduce(lambda a, b: a + b, irq["cpu"])
+
+			self.list_store.set(info, self.COL_NUM, irqnr,
+						  self.COL_PID, pid,
+						  self.COL_POL, sched,
+						  self.COL_PRI, prio,
+						  self.COL_AFF, irq_affinity,
+						  self.COL_EVENTS, events,
+						  self.COL_NAME, utilist.csv(users, '%s'))
+		self.treeview.show_all()
+	
+	def refresh(self, ps):
+		self.irqs.reload()
+		self.show(ps)
+		return True
+
+class procview:
+
+	( COL_PID, COL_POL, COL_PRI, COL_AFF, COL_VOLCTXT, COL_NONVOLCTXT, COL_NAME ) = range(7)
+	labels = [ "PID", "Policy", "Priority", "Affinity",
+		   "VolCtxtSwitch", "NonVolCtxtSwitch", "Name" ]
+
+	def __init__(self, treeview):
+		self.treeview = treeview
+		self.nr_cpus = procfs.cpuinfo().nr_cpus
+		self.list_store = gtk.ListStore(gobject.TYPE_UINT,
+				      		gobject.TYPE_STRING,
+				      		gobject.TYPE_INT,
+				      		gobject.TYPE_STRING,
+				      		gobject.TYPE_INT,
+				      		gobject.TYPE_INT,
+				      		gobject.TYPE_STRING)
+		self.treeview.set_model(self.list_store)
+		
+		model = self.treeview.get_model()
+		renderer = gtk.CellRendererText()
+
+		for col in range(len(self.labels)):
+			column = gtk.TreeViewColumn(self.labels[col], renderer, text = col)
+			column.set_sort_column_id(col)
+			self.treeview.append_column(column)
+
+	def show(self, ps):
+		self.list_store.clear()
+
+		pid_list = ps.keys()
+		pid_list.sort()
+
+		for pid in pid_list:
+			info = self.list_store.append()
+
+			try:
+				sched = schedutils.schedstr(schedutils.get_scheduler(pid))[6:]
+			except SystemError:
+				# Process doesn't exists anymore
+				self.list_store.remove(info)
+				continue
+
+			prio = int(ps[pid]["stat"]["rt_priority"])
+
+			thread_affinity_list = schedutils.get_affinity(pid)
+			if len(thread_affinity_list) <= 4:
+				thread_affinity = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
+			else:
+				thread_affinity = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(pid),
+										 self.nr_cpus), '0x%x')
+			try:
+				voluntary_ctxt_switches = int(ps[pid]["status"]["voluntary_ctxt_switches"])
+				nonvoluntary_ctxt_switches = int(ps[pid]["status"]["nonvoluntary_ctxt_switches"])
+			except:
+				voluntary_ctxt_switches = -1
+				nonvoluntary_ctxt_switches = -1
+
+			self.list_store.set(info, self.COL_PID, pid,
+						  self.COL_POL, sched,
+						  self.COL_PRI, prio,
+						  self.COL_AFF, thread_affinity,
+						  self.COL_VOLCTXT, voluntary_ctxt_switches,
+						  self.COL_NONVOLCTXT, nonvoluntary_ctxt_switches,
+						  self.COL_NAME, ps[pid]["stat"]["comm"])
+		self.treeview.show_all()
+		return True
+
+class tuna():
+
+	def __init__(self):
+		if self.check_root():
+			sys.exit(1)
+		self.ps = procfs.pidstats()
+		self.irqs = procfs.interrupts()
+		event_handlers = { "on_mainbig_window_delete_event" : self.on_mainbig_window_delete_event }
+		#tuna_glade = "/usr/share/tuna/tuna_gui.glade"
+		tuna_glade = "./tuna_gui.glade"
+		self.wtree = gtk.glade.XML(tuna_glade, "mainbig_window")
+		self.wtree.signal_autoconnect(event_handlers)
+
+		self.cpuview = cpuview(self.wtree.get_widget("cpuview"))
+		self.irqview = irqview(self.wtree.get_widget("irqlist"), self.irqs)
+		self.procview = procview(self.wtree.get_widget("processlist"))
+		self.show()
+		self.timer = gobject.timeout_add(5000, self.refresh)
+
+	def on_mainbig_window_delete_event(self, obj, event):
+		gtk.main_quit()
+
+	def show(self):
+		self.irqview.show(self.ps)
+		self.procview.show(self.ps)
+
+	def refresh(self):
+		self.ps.reload()
+		self.irqview.refresh(self.ps)
+		self.procview.show(self.ps)
+		return True
+
+	def check_root(self):
+		if os.getuid() == 0:
+			return False
+
+		dialog = gtk.MessageDialog(None,
+					   gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
+					   gtk.MESSAGE_WARNING,
+					   gtk.BUTTONS_YES_NO,
+					   "Root priviledge required\n\n" + \
+					   "Some functions will not work without root " + \
+					   "privilege.\nDo you want to continue?")
+		ret = dialog.run()
+		dialog.destroy()
+		if ret == gtk.RESPONSE_NO:
+			return True
+		return False
+
+def main():
+    tuna()
+    gtk.main()
+
+if __name__ == '__main__':
+    main()
