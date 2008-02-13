@@ -69,7 +69,8 @@ class dbstats:
 				   ( "futex_performance_hack", "text" ),
 				   ( "kcmd_idle", "text" ),
 				   ( "lock_stat", "text" ),
-				   ( "tcp_congestion_control", "text" ) ]
+				   ( "tcp_congestion_control", "text" ),
+				   ( "kcmd_nohz", "text" ) ]
 
 	def create_tables(self):
 		query = dbutil_create_text_table_query("system_tunings", self.system_tunings_columns)

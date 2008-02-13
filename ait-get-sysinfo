@@ -128,6 +128,10 @@ if __name__ == '__main__':
 	if kcmd.options.has_key("idle"):
 		sysinfo["kcmd_idle"] = kcmd.options["idle"]
 
+	sysinfo["kcmd_nohz"] = None
+	if kcmd.options.has_key("nohz"):
+		sysinfo["kcmd_nohz"] = kcmd.options["nohz"]
+
 	sysinfo["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
 
 	if app_process_name:
