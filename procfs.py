@@ -61,12 +61,13 @@ class pidstats:
 			try:
 				self.processes[pid]["stat"] = self.read_stat_entry(pid)
 			except:
-				pass
+				del self.processes[pid]
+				continue
 
 			try:
 				self.processes[pid]["status"] = self.read_status_entry(pid)
 			except:
-				pass
+				del self.processes[pid]
 
 	def find_by_name(self, name):
 		name = name[:15]
