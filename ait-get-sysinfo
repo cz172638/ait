@@ -56,7 +56,10 @@ def get_nic_kthread_rtprios(irqs, ps):
 
 if __name__ == '__main__':
 
-	app_process_name = sys.argv[1]
+	if len(sys.argv) > 1:
+		app_process_name = sys.argv[1]
+	else:
+		app_process_name = None
 	sysinfo = {}
 
 	pfs = procfs.pidstats()
@@ -127,25 +130,26 @@ if __name__ == '__main__':
 
 	sysinfo["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
 
-	app = pfs.find_by_name(app_process_name)
-	if app:
-		sysinfo["app_rtprio"] = pfs.get_rtprios(app_process_name)
-		sysinfo["app_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(app[0]),
-												    int(sysinfo["nr_cpus"])), "%x")
-		sysinfo["app_sched"] = schedutils.schedstr(schedutils.get_scheduler(app[0]))
+	if app_process_name:
+		app = pfs.find_by_name(app_process_name)
+		if app:
+			sysinfo["app_rtprio"] = pfs.get_rtprios(app_process_name)
+			sysinfo["app_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(app[0]),
+													    int(sysinfo["nr_cpus"])), "%x")
+			sysinfo["app_sched"] = schedutils.schedstr(schedutils.get_scheduler(app[0]))
 
-		# Default: libc statically linked
-		sysinfo["libc"] = None
-		# Discover which libc is being used by the application
-		smaps = procfs.smaps(app[0])
-		if smaps:
-			libc = smaps.find_by_name_fragment("/libc-")
-			if libc:
-				sysinfo["libc"] = libc[0].name
-	else:
-		sysinfo["app_rtprio"] = None
-		sysinfo["app_affinity"] = None
-		sysinfo["app_sched"] = None
+			# Default: libc statically linked
+			sysinfo["libc"] = None
+			# Discover which libc is being used by the application
+			smaps = procfs.smaps(app[0])
+			if smaps:
+				libc = smaps.find_by_name_fragment("/libc-")
+				if libc:
+					sysinfo["libc"] = libc[0].name
+		else:
+			sysinfo["app_rtprio"] = None
+			sysinfo["app_affinity"] = None
+			sysinfo["app_sched"] = None
 
 	sysinfo["tcp_congestion_control"] = sysctl["net.ipv4.tcp_congestion_control"]
 
