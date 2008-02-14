@@ -80,6 +80,13 @@ class pidstats:
 				pids.append(pid)
 		return pids
 
+	def find_by_regex(self, regex):
+		pids = []
+		for pid in self.processes.keys():
+			if regex.match(self.processes[pid]["stat"]["comm"]):
+				pids.append(pid)
+		return pids
+
 	def get_per_cpu_rtprios(self, basename):
 		cpu = 0
 		priorities=""
