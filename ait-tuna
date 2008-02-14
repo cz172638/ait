@@ -5,8 +5,11 @@
 import pygtk
 pygtk.require("2.0")
 
-import ethtool, gtk, gobject, os, procfs, schedutils, sys, utilist
+import ethtool, gtk, gobject, os, procfs, re, schedutils, sys, utilist
 import gtk.glade
+
+#tuna_glade = "/usr/share/tuna/tuna_gui.glade"
+tuna_glade = "./tuna_gui.glade"
 
 class cpuview:
 
@@ -38,7 +41,6 @@ class cpuview:
 					    text = self.COL_USAGE, value = self.COL_USAGE)
 		self.treeview.append_column(column)
 
-		self.refresh()
 		self.timer = gobject.timeout_add(3000, self.refresh)
 
 	def filter_toggled(self, cell, path, model):
@@ -81,8 +83,6 @@ class irqview:
 				      		gobject.TYPE_UINT,
 				      		gobject.TYPE_STRING)
 		self.treeview.set_model(self.list_store)
-		
-		model = self.treeview.get_model()
 		renderer = gtk.CellRendererText()
 
 		for col in range(len(self.labels)):
@@ -148,6 +148,141 @@ class irqview:
 		self.show(ps)
 		return True
 
+class process_druid():
+
+	( PROCESS_COL_PID, PROCESS_COL_NAME ) = range(2)
+	# FIXME: should go to python-schedutils
+	( SCHED_OTHER, SCHED_FIFO, SCHED_RR, SCHED_BATCH ) = range(4)
+
+	def __init__(self, ps, pid, nr_cpus):
+		self.ps = ps
+		self.pid = pid
+		self.nr_cpus = nr_cpus
+		pid_info = self.ps[pid]
+		self.window = gtk.glade.XML(tuna_glade, "set_process_attributes")
+		self.dialog = self.window.get_widget("set_process_attributes")
+		event_handlers = { "on_cmdline_regex_changed" : self.on_cmdline_regex_changed,
+				   "on_affinity_text_changed" : self.on_affinity_text_changed,
+				   "on_sched_policy_combo_changed" : self.on_sched_policy_combo_changed,
+				   "on_command_regex_clicked" : self.on_command_regex_clicked,
+				   "on_all_these_threads_clicked" : self.on_all_these_threads_clicked,
+				   "on_just_this_thread_clicked" : self.on_just_this_thread_clicked }
+		self.window.signal_autoconnect(event_handlers)
+
+		self.sched_pri = self.window.get_widget("sched_pri_spin")
+		self.sched_policy = self.window.get_widget("sched_policy_combo")
+		self.regex_edit = self.window.get_widget("cmdline_regex")
+		self.affinity = self.window.get_widget("affinity_text")
+		self.just_this_thread = self.window.get_widget("just_this_thread")
+		self.all_these_threads = self.window.get_widget("all_these_threads")
+		processes = self.window.get_widget("matching_process_list")
+
+		self.sched_pri.set_value(int(pid_info["stat"]["rt_priority"]))
+		process_regex = pid_info["stat"]["comm"]
+		thread_affinity_list = schedutils.get_affinity(pid)
+		if len(thread_affinity_list) <= 4:
+			self.thread_affinity_text = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
+		else:
+			self.thread_affinity_text = utilist.csv(utilist.hexbitmask(thread_affinity_list,
+									           self.nr_cpus), '0x%x')
+		self.affinity.set_text(self.thread_affinity_text)
+		self.create_matching_process_model(processes)
+		self.create_policy_model(self.sched_policy)
+		self.sched_policy.set_active(schedutils.get_scheduler(pid))
+		self.regex_edit.set_text(process_regex)
+		self.just_this_thread.set_active(True)
+		self.regex_edit.set_sensitive(False)
+
+	def refresh_match_pids(self, process_regex):
+		self.process_list_store.clear()
+		for match_pid in self.ps.find_by_regex(process_regex):
+			info = self.process_list_store.append()
+			self.process_list_store.set(info, self.PROCESS_COL_PID, match_pid,
+						    self.PROCESS_COL_NAME, self.ps[match_pid]["stat"]["comm"])
+
+	def create_matching_process_model(self, processes):
+		labels = [ "PID", "Name" ]
+		
+		self.process_list_store = gtk.ListStore(gobject.TYPE_UINT,
+							gobject.TYPE_STRING)
+		processes.set_model(self.process_list_store)
+		renderer = gtk.CellRendererText()
+
+		for col in range(len(labels)):
+			column = gtk.TreeViewColumn(labels[col], renderer, text = col)
+			column.set_sort_column_id(col)
+			processes.append_column(column)
+
+	def create_policy_model(self, policy):
+		( COL_TEXT, COL_SCHED ) = range(2)
+		list_store = gtk.ListStore(gobject.TYPE_STRING,
+					   gobject.TYPE_UINT)
+		policy.set_model(list_store)
+		renderer = gtk.CellRendererText()
+		policy.pack_start(renderer, True)
+		policy.add_attribute(renderer, "text", COL_TEXT)
+		for pol in range(4):
+			row = list_store.append()
+			list_store.set(row, COL_TEXT, schedutils.schedstr(pol),
+					    COL_SCHED, pol)
+
+	def on_cmdline_regex_changed(self, entry):
+		process_regex_text = entry.get_text()
+		process_regex = re.compile(process_regex_text)
+		self.refresh_match_pids(process_regex)
+
+	def on_just_this_thread_clicked(self, button):
+		self.regex_edit.set_sensitive(False)
+
+	def on_command_regex_clicked(self, button):
+		self.regex_edit.set_sensitive(True)
+
+	def on_all_these_threads_clicked(self, button):
+		self.regex_edit.set_sensitive(False)
+
+	def on_sched_policy_combo_changed(self, button):
+		new_policy = self.sched_policy.get_active()
+		if new_policy in ( self.SCHED_FIFO, self.SCHED_RR ):
+			can_change_pri = True
+		else:
+			can_change_pri = False
+		self.sched_pri.set_sensitive(can_change_pri)
+
+	def on_affinity_text_changed(self, button):
+		new_thread_affinity_text = self.affinity.get_text()
+		if self.thread_affinity_text != new_thread_affinity_text:
+			try:
+				new_affinity = int(new_thread_affinity_text, 16)
+			except:
+				if len(new_thread_affinity_text.strip()) > 0:
+					# print "not a hex number"
+					self.affinity.set_text(self.thread_affinity_text)
+					return
+			self.thread_affinity_text = new_thread_affinity_text
+
+	def run(self):
+		rc = self.dialog.run()
+		if rc == gtk.RESPONSE_OK:
+			new_policy = self.sched_policy.get_active()
+			new_prio = self.sched_pri.get_value()
+			new_affinity = self.affinity.get_text()
+			if self.just_this_thread.get_active():
+				print "setting just pid %d to policy=%s, prio=%d, affinity=%s" % \
+				      (self.pid, schedutils.schedstr(new_policy),
+				       new_prio, new_affinity)
+			elif self.all_these_threads.get_active():
+				print "setting all threads of pid %d to policy=%s, prio=%d, affinity=%s" % \
+				      (self.pid, schedutils.schedstr(new_policy),
+				       new_prio, new_affinity)
+			else:
+				print "setting all threads that match regex '%s' to policy=%s, prio=%d, affinity=%s" % \
+				      (self.regex_edit.get_text(),
+				       schedutils.schedstr(new_policy),
+				       new_prio, new_affinity)
+
+		self.dialog.destroy()
+		return rc
+
 class procview:
 
 	( COL_PID, COL_POL, COL_PRI, COL_AFF, COL_VOLCTXT, COL_NONVOLCTXT, COL_NAME ) = range(7)
@@ -165,8 +300,6 @@ class procview:
 				      		gobject.TYPE_INT,
 				      		gobject.TYPE_STRING)
 		self.treeview.set_model(self.list_store)
-		
-		model = self.treeview.get_model()
 		renderer = gtk.CellRendererText()
 
 		for col in range(len(self.labels)):
@@ -175,6 +308,7 @@ class procview:
 			self.treeview.append_column(column)
 
 	def show(self, ps):
+		self.ps = ps
 		self.list_store.clear()
 
 		pid_list = ps.keys()
@@ -196,7 +330,7 @@ class procview:
 			if len(thread_affinity_list) <= 4:
 				thread_affinity = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
 			else:
-				thread_affinity = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(pid),
+				thread_affinity = utilist.csv(utilist.hexbitmask(thread_affinity_list,
 										 self.nr_cpus), '0x%x')
 			try:
 				voluntary_ctxt_switches = int(ps[pid]["status"]["voluntary_ctxt_switches"])
@@ -215,6 +349,49 @@ class procview:
 		self.treeview.show_all()
 		return True
 
+	def refresh(self, a):
+		self.ps.reload()
+		self.show(self.ps)
+		return True
+
+	def edit_attributes(self, a):
+		ret = self.treeview.get_path_at_pos(self.last_x, self.last_y)
+		if not ret:
+			return
+		path, col, xpos, ypos = ret
+		if not path:
+			return
+		row = self.list_store.get_iter(path)
+		pid = self.list_store.get_value(row, self.COL_PID)
+		if not self.ps.has_key(pid):
+			return
+
+		dialog = process_druid(self.ps, pid, self.nr_cpus)
+		dialog.run()
+
+	def on_processlist_button_press_event(self, treeview, event):
+		if event.type != gtk.gdk.BUTTON_PRESS or event.button != 3:
+			return
+
+		self.last_x = int(event.x)
+		self.last_y = int(event.y)
+
+		menu = gtk.Menu()
+
+		setattr = gtk.MenuItem("_Set process attributes")
+		refresh = gtk.MenuItem("_Refresh process list")
+
+		menu.add(setattr)
+		menu.add(refresh)
+
+		setattr.connect_object('activate', self.edit_attributes, event)
+		refresh.connect_object('activate', self.refresh, event)
+
+		setattr.show()
+		refresh.show()
+
+		menu.popup(None, None, None, event.button, event.time)
+
 class tuna():
 
 	def __init__(self):
@@ -222,17 +399,18 @@ class tuna():
 			sys.exit(1)
 		self.ps = procfs.pidstats()
 		self.irqs = procfs.interrupts()
-		event_handlers = { "on_mainbig_window_delete_event" : self.on_mainbig_window_delete_event }
-		#tuna_glade = "/usr/share/tuna/tuna_gui.glade"
-		tuna_glade = "./tuna_gui.glade"
 		self.wtree = gtk.glade.XML(tuna_glade, "mainbig_window")
-		self.wtree.signal_autoconnect(event_handlers)
 
 		self.cpuview = cpuview(self.wtree.get_widget("cpuview"))
 		self.irqview = irqview(self.wtree.get_widget("irqlist"), self.irqs)
 		self.procview = procview(self.wtree.get_widget("processlist"))
+
+		event_handlers = { "on_mainbig_window_delete_event"    : self.on_mainbig_window_delete_event,
+				   "on_processlist_button_press_event" : self.procview.on_processlist_button_press_event }
+		self.wtree.signal_autoconnect(event_handlers)
+
 		self.show()
-		self.timer = gobject.timeout_add(5000, self.refresh)
+		# self.timer = gobject.timeout_add(5000, self.refresh)
 
 	def on_mainbig_window_delete_event(self, obj, event):
 		gtk.main_quit()
@@ -265,8 +443,11 @@ class tuna():
 		return False
 
 def main():
-    tuna()
-    gtk.main()
+	try:
+		tuna()
+		gtk.main()
+	except KeyboardInterrupt:
+		pass
 
 if __name__ == '__main__':
     main()
