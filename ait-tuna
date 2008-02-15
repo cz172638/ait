@@ -148,7 +148,7 @@ class irqview:
 		self.show(ps)
 		return True
 
-class process_druid():
+class process_druid:
 
 	( PROCESS_COL_PID, PROCESS_COL_NAME ) = range(2)
 	# FIXME: should go to python-schedutils
@@ -392,7 +392,7 @@ class procview:
 
 		menu.popup(None, None, None, event.button, event.time)
 
-class tuna():
+class tuna:
 
 	def __init__(self):
 		if self.check_root():
