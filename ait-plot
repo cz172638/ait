@@ -223,7 +223,7 @@ def get_common_columns(results, columns):
 
 metrics = [ "avg", "dev", "min", "max" ]
 
-def create_html(db, ref, others):
+def create_html(db, ref, others, field_exclude_list):
 	list_others = utilist.csv([ o["report"] for o in others ], "%d")
 
 	prefix="%d_%s" % (ref["report"], list_others)
@@ -250,7 +250,7 @@ def create_html(db, ref, others):
 	f.write('<h1>Specific Tunings:</h0>\n<table border=1 style="background-color: #8aa;400px; border: thin solid black; font-family: sans-serif; font-size: 10px;">\n<tr>')
 	f.write("<th>report</th><th>max<br>packet<br>rate</th>")
 	for column in range(len(columns)):
-		if column not in common_columns:
+		if column not in common_columns and columns[column] not in field_exclude_list:
 			f.write("<th>%s</th>" % columns[column].replace("_", "<br>"))
 
 	color_index = 0
@@ -260,7 +260,7 @@ def create_html(db, ref, others):
 	f.write('<td>%d</td>' % ref["max_report_rate"])
 	color_index += 1
 	for field in range(len(columns)):
-		if field not in common_columns:
+		if field not in common_columns and columns[field] not in field_exclude_list:
 			if columns[field] == "lock_stat" and \
 			   os.access("lock_stat/%d.txt", os.F_OK):
 				f.write("<td><a href=lock_stat/%s.txt>%s</a></td>" % (ref["report"], ref["system_tunings"][field]))
@@ -274,7 +274,7 @@ def create_html(db, ref, others):
 		f.write('<td>%d</td>' % other["max_report_rate"])
 		color_index += 1
 		for field in range(len(columns)):
-			if field not in common_columns:
+			if field not in common_columns and columns[field] not in field_exclude_list:
 				if columns[field] == "lock_stat" and \
 				   os.access("lock_stat/%d.txt" % other["report"], os.F_OK):
 					f.write("<td><a href=lock_stat/%s.txt>%s</a></td>" % (other["report"], other["system_tunings"][field]))
@@ -285,10 +285,12 @@ def create_html(db, ref, others):
 
 	f.write('<h1>Common Tunings:</h1>\n<table border=1 style="background-color: #8aa;400px; border: thin solid black; font-family: sans-serif; font-size: 10px;">\n<tr>')
 	for column in common_columns:
-		f.write("<th>%s</th>" % columns[column].replace("_", "<br>"))
+		if columns[column] not in field_exclude_list:
+			f.write("<th>%s</th>" % columns[column].replace("_", "<br>"))
 	f.write('</tr>\n<tr>')
 	for column in common_columns:
-		f.write("<td>%s</td>" % ref["system_tunings"][column])
+		if columns[column] not in field_exclude_list:
+			f.write("<td>%s</td>" % ref["system_tunings"][column])
 		
 	f.write("</tr>\n</table>\n")
 	for metric in metrics[1:]:
@@ -298,7 +300,7 @@ def create_html(db, ref, others):
 
 	f.close()
 
-def plot_metric_graphs(db, metric, ref_report, reports, plot_max):
+def plot_metric_graphs(db, metric, ref_report, reports, plot_max, field_exclude_list):
 	global color_index
 	color_index = 0
 	ref = get_report_info(db, ref_report, metric)
@@ -309,7 +311,7 @@ def plot_metric_graphs(db, metric, ref_report, reports, plot_max):
 	plot_metric(metric, ref, others)
 	if plot_max:
 		plot_max_rates(ref, others)
-		create_html(db, ref, others)
+		create_html(db, ref, others, field_exclude_list)
 
 if __name__ == '__main__':
 	import sys
@@ -317,9 +319,13 @@ if __name__ == '__main__':
 	appname = sys.argv[1]
 	ref_report = int(sys.argv[2])
 	reports = sys.argv[3]
+	if len(sys.argv) > 3:
+		field_exclude_list = sys.argv[4].split(",")
+	else:
+		field_exclude_list = []
 
 	db = dbstats(appname)
 	plot_max = True
 	for metric in metrics:
-		plot_metric_graphs(db, metric, ref_report, reports, plot_max)
+		plot_metric_graphs(db, metric, ref_report, reports, plot_max, field_exclude_list)
 		plot_max = False
