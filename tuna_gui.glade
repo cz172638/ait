@@ -440,8 +440,7 @@
                       <widget class="GtkEntry" id="irq_affinity_text">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <signal name="focus_out_event" handler="on_irq_affinity_text_focus_out_event"/>
-                        <signal name="activate" handler="on_irq_affinity_text_activate"/>
+                    	<signal name="changed" handler="on_irq_affinity_text_changed"/>
                       </widget>
                       <packing>
                         <property name="left_attach">2</property>

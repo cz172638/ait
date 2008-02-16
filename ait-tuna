@@ -8,6 +8,9 @@ pygtk.require("2.0")
 import ethtool, gtk, gobject, os, procfs, re, schedutils, sys, utilist
 import gtk.glade
 
+# FIXME: should go to python-schedutils
+( SCHED_OTHER, SCHED_FIFO, SCHED_RR, SCHED_BATCH ) = range(4)
+
 #tuna_glade = "/usr/share/tuna/tuna_gui.glade"
 tuna_glade = "./tuna_gui.glade"
 
@@ -66,6 +69,114 @@ class cpuview:
 		self.treeview.show_all()
 		return True
 
+def get_irq_users(irqs, irq, nics = None):
+	if not nics:
+		nics = ethtool.get_active_devices()
+	users = irqs[irq]["users"]
+	for u in users:
+		if u in nics:
+			users[users.index(u)] = "%s(%s)" % (u, ethtool.get_module(u))
+	return users
+			
+def get_irq_affinity_text(irqs, irq):
+	affinity_list = irqs[irq]["affinity"]
+	try:
+		if len(affinity_list) <= 4:
+			return ("%s" % affinity_list)[1:-1].replace(" ", "")
+		else:
+			return utilist.csv(utilist.hexbitmask(affinity_list,
+							      irqs.nr_cpus), '0x%x')
+	except:
+		# needs root prio to read /proc/irq/<NUM>/smp_affinity
+		return ""
+
+def on_affinity_text_changed(self):
+	new_affinity_text = self.affinity.get_text()
+	if self.affinity_text != new_affinity_text:
+		try:
+			new_affinity = int(new_affinity_text, 16)
+		except:
+			if len(new_affinity_text.strip()) > 0:
+				# print "not a hex number"
+				self.affinity.set_text(self.affinity_text)
+				return
+		self.affinity_text = new_affinity_text
+
+class irq_druid:
+
+	def __init__(self, irqs, ps, irq):
+		self.irqs = irqs
+		self.ps = ps
+		self.irq = irq
+		self.window = gtk.glade.XML(tuna_glade, "set_irq_attributes")
+		self.dialog = self.window.get_widget("set_irq_attributes")
+		event_handlers = { "on_irq_affinity_text_changed" : self.on_irq_affinity_text_changed,
+				   "on_sched_policy_combo_changed": self.on_sched_policy_combo_changed }
+		self.window.signal_autoconnect(event_handlers)
+
+		self.sched_pri = self.window.get_widget("irq_pri_spinbutton")
+		self.sched_policy = self.window.get_widget("irq_policy_combobox")
+		self.affinity = self.window.get_widget("irq_affinity_text")
+		text = self.window.get_widget("irq_text")
+
+		users = get_irq_users(irqs, irq)
+		self.affinity_text = get_irq_affinity_text(irqs, irq)
+
+		pids = ps.find_by_name("IRQ-%d" % irq)
+		if pids:
+			pid = pids[0]
+			prio = int(ps[pid]["stat"]["rt_priority"])
+			self.create_policy_model(self.sched_policy)
+			self.sched_policy.set_active(schedutils.get_scheduler(pid))
+			text.set_markup("IRQ <b>%u</b> (PID <b>%u</b>), pri <b>%u</b>, aff <b>%s</b>, <tt><b>%s</b></tt>" % \
+					( irq, pid, prio, self.affinity_text,
+					  utilist.csv(users, '%s')))
+		else:
+			self.sched_pri.set_sensitive(False)
+			self.sched_policy.set_sensitive(False)
+			text.set_markup("IRQ <b>%u</b>, aff <b>%s</b>, <tt><b>%s</b></tt>" % \
+					( irq, self.affinity_text,
+				 	  utilist.csv(users, '%s')))
+
+		self.affinity.set_text(self.affinity_text)
+
+	def create_policy_model(self, policy):
+		( COL_TEXT, COL_SCHED ) = range(2)
+		list_store = gtk.ListStore(gobject.TYPE_STRING,
+					   gobject.TYPE_UINT)
+		policy.set_model(list_store)
+		renderer = gtk.CellRendererText()
+		policy.pack_start(renderer, True)
+		policy.add_attribute(renderer, "text", COL_TEXT)
+		for pol in range(4):
+			row = list_store.append()
+			list_store.set(row, COL_TEXT, schedutils.schedstr(pol),
+					    COL_SCHED, pol)
+
+	def on_sched_policy_combo_changed(self, button):
+		new_policy = self.sched_policy.get_active()
+		if new_policy in ( SCHED_FIFO, SCHED_RR ):
+			can_change_pri = True
+		else:
+			can_change_pri = False
+		self.sched_pri.set_sensitive(can_change_pri)
+
+	def on_irq_affinity_text_changed(self, button):
+		on_affinity_text_changed(self)
+
+	def run(self):
+		rc = self.dialog.run()
+		if rc == gtk.RESPONSE_OK:
+			new_policy = self.sched_policy.get_active()
+			new_prio = self.sched_pri.get_value()
+			new_affinity = self.affinity.get_text()
+			print "setting IRQ %d to policy=%s, prio=%d, affinity=%s" % \
+			      (self.irq, schedutils.schedstr(new_policy),
+			       new_prio, new_affinity)
+
+		self.dialog.destroy()
+		return rc
+
 class irqview:
 
 	( COL_NUM, COL_PID, COL_POL, COL_PRI, COL_AFF, COL_EVENTS, COL_NAME ) = range(7)
@@ -91,6 +202,7 @@ class irqview:
 			self.treeview.append_column(column)
 
 	def show(self, ps):
+		self.ps = ps
 		self.list_store.clear()
 
 		irq_list = []
@@ -106,10 +218,7 @@ class irqview:
 		for irqnr in irq_list:
 			info = self.list_store.append()
 			irq = self.irqs[irqnr]
-			users = irq["users"]
-			for u in users:
-				if u in nics:
-					users[users.index(u)] = "%s(%s)" % (u, ethtool.get_module(u))
+			users = get_irq_users(self.irqs, irqnr, nics)
 
 			pids = ps.find_by_name("IRQ-%d" % irqnr)
 			if pids:
@@ -121,38 +230,64 @@ class irqview:
 				pid = -1
 				prio = -1
 
-			irq_affinity_list = irq["affinity"]
-			try:
-				if len(irq_affinity_list) <= 4:
-					irq_affinity = ("%s" % irq_affinity_list)[1:-1].replace(" ", "")
-				else:
-					irq_affinity = utilist.csv(utilist.hexbitmask(irq_affinity_list,
-										      self.irqs.nr_cpus), '0x%x')
-			except:
-				# needs root prio to read /proc/irq/<NUM>/smp_affinity
-				irq_affinity = ""
-
+			affinity_text = get_irq_affinity_text(self.irqs, irqnr)
 			events = reduce(lambda a, b: a + b, irq["cpu"])
 
 			self.list_store.set(info, self.COL_NUM, irqnr,
 						  self.COL_PID, pid,
 						  self.COL_POL, sched,
 						  self.COL_PRI, prio,
-						  self.COL_AFF, irq_affinity,
+						  self.COL_AFF, affinity_text,
 						  self.COL_EVENTS, events,
 						  self.COL_NAME, utilist.csv(users, '%s'))
 		self.treeview.show_all()
 	
 	def refresh(self, ps):
 		self.irqs.reload()
-		self.show(ps)
+		self.show(self.ps)
 		return True
+
+	def edit_attributes(self, a):
+		ret = self.treeview.get_path_at_pos(self.last_x, self.last_y)
+		if not ret:
+			return
+		path, col, xpos, ypos = ret
+		if not path:
+			return
+		row = self.list_store.get_iter(path)
+		irq = self.list_store.get_value(row, self.COL_NUM)
+		if not self.irqs.has_key(irq):
+			return
+
+		dialog = irq_druid(self.irqs, self.ps, irq)
+		dialog.run()
+
+	def on_irqlist_button_press_event(self, treeview, event):
+		if event.type != gtk.gdk.BUTTON_PRESS or event.button != 3:
+			return
+
+		self.last_x = int(event.x)
+		self.last_y = int(event.y)
+
+		menu = gtk.Menu()
+
+		setattr = gtk.MenuItem("_Set IRQ attributes")
+		refresh = gtk.MenuItem("_Refresh IRQ list")
+
+		menu.add(setattr)
+		menu.add(refresh)
+
+		setattr.connect_object('activate', self.edit_attributes, event)
+		refresh.connect_object('activate', self.refresh, event)
+
+		setattr.show()
+		refresh.show()
+
+		menu.popup(None, None, None, event.button, event.time)
 
 class process_druid:
 
 	( PROCESS_COL_PID, PROCESS_COL_NAME ) = range(2)
-	# FIXME: should go to python-schedutils
-	( SCHED_OTHER, SCHED_FIFO, SCHED_RR, SCHED_BATCH ) = range(4)
 
 	def __init__(self, ps, pid, nr_cpus):
 		self.ps = ps
@@ -179,13 +314,13 @@ class process_druid:
 
 		self.sched_pri.set_value(int(pid_info["stat"]["rt_priority"]))
 		process_regex = pid_info["stat"]["comm"]
-		thread_affinity_list = schedutils.get_affinity(pid)
-		if len(thread_affinity_list) <= 4:
-			self.thread_affinity_text = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
+		affinity_list = schedutils.get_affinity(pid)
+		if len(affinity_list) <= 4:
+			self.affinity_text = ("%s" % affinity_list)[1:-1].replace(" ", "")
 		else:
-			self.thread_affinity_text = utilist.csv(utilist.hexbitmask(thread_affinity_list,
-									           self.nr_cpus), '0x%x')
-		self.affinity.set_text(self.thread_affinity_text)
+			self.affinity_text = utilist.csv(utilist.hexbitmask(affinity_list,
+									    self.nr_cpus), '0x%x')
+		self.affinity.set_text(self.affinity_text)
 		self.create_matching_process_model(processes)
 		self.create_policy_model(self.sched_policy)
 		self.sched_policy.set_active(schedutils.get_scheduler(pid))
@@ -242,23 +377,14 @@ class process_druid:
 
 	def on_sched_policy_combo_changed(self, button):
 		new_policy = self.sched_policy.get_active()
-		if new_policy in ( self.SCHED_FIFO, self.SCHED_RR ):
+		if new_policy in ( SCHED_FIFO, SCHED_RR ):
 			can_change_pri = True
 		else:
 			can_change_pri = False
 		self.sched_pri.set_sensitive(can_change_pri)
 
 	def on_affinity_text_changed(self, button):
-		new_thread_affinity_text = self.affinity.get_text()
-		if self.thread_affinity_text != new_thread_affinity_text:
-			try:
-				new_affinity = int(new_thread_affinity_text, 16)
-			except:
-				if len(new_thread_affinity_text.strip()) > 0:
-					# print "not a hex number"
-					self.affinity.set_text(self.thread_affinity_text)
-					return
-			self.thread_affinity_text = new_thread_affinity_text
+		on_affinity_text_changed(self)
 
 	def run(self):
 		rc = self.dialog.run()
@@ -406,7 +532,8 @@ class tuna:
 		self.procview = procview(self.wtree.get_widget("processlist"))
 
 		event_handlers = { "on_mainbig_window_delete_event"    : self.on_mainbig_window_delete_event,
-				   "on_processlist_button_press_event" : self.procview.on_processlist_button_press_event }
+				   "on_processlist_button_press_event" : self.procview.on_processlist_button_press_event,
+				   "on_irqlist_button_press_event"     : self.irqview.on_irqlist_button_press_event }
 		self.wtree.signal_autoconnect(event_handlers)
 
 		self.show()
