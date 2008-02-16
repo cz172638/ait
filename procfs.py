@@ -131,6 +131,9 @@ class interrupts:
 	def keys(self):
 		return self.interrupts.keys()
 
+	def has_key(self, key):
+		return self.interrupts.has_key(str(key))
+
 	def reload(self):
 		del self.interrupts
 		self.interrupts = {}
