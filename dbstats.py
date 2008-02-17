@@ -70,6 +70,9 @@ class dbstats:
 				   ( "kcmd_idle", "text" ),
 				   ( "lock_stat", "text" ),
 				   ( "tcp_congestion_control", "text" ),
+				   ( "tcp_sack", "text" ),
+				   ( "tcp_dsack", "text" ),
+				   ( "tcp_window_scaling", "text" ),
 				   ( "kcmd_nohz", "text" ) ]
 
 	def create_tables(self):

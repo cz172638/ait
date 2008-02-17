@@ -155,7 +155,11 @@ if __name__ == '__main__':
 			sysinfo["app_affinity"] = None
 			sysinfo["app_sched"] = None
 
-	sysinfo["tcp_congestion_control"] = sysctl["net.ipv4.tcp_congestion_control"]
+	for tcpknob in [ "tcp_congestion_control",
+			 "tcp_dsack",
+			 "tcp_sack",
+			 "tcp_window_scaling" ]:
+		sysinfo[tcpknob] = sysctl["net.ipv4.%s" % tcpknob]
 
 	keys = sysinfo.keys()
 	keys.sort()

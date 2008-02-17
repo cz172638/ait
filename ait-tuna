@@ -94,7 +94,8 @@ def on_affinity_text_changed(self):
 	new_affinity_text = self.affinity.get_text()
 	if self.affinity_text != new_affinity_text:
 		try:
-			new_affinity = int(new_affinity_text, 16)
+			for cpu in new_affinity_text.strip(",").split(","):
+				new_affinity_cpu_entry = int(cpu, 16)
 		except:
 			if len(new_affinity_text.strip()) > 0:
 				# print "not a hex number"
@@ -386,16 +387,76 @@ class process_druid:
 	def on_affinity_text_changed(self, button):
 		on_affinity_text_changed(self)
 
+
+	def invalid_affinity(self):
+		dialog = gtk.MessageDialog(None,
+					   gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
+					   gtk.MESSAGE_WARNING,
+					   gtk.BUTTONS_OK,
+					   "Invalid affinity, specify a list of CPUs!")
+		dialog.run()
+		dialog.destroy()
+		return False
+
+	def set_attributes(self, pid, new_policy, new_prio, new_affinity):
+		changed = False
+		curr_policy = schedutils.get_scheduler(pid)
+		curr_prio = int(self.ps[pid]["stat"]["rt_priority"])
+		if curr_policy != new_policy or curr_prio != new_prio:
+			try:
+				schedutils.set_scheduler(pid, new_policy, new_prio)
+			except:
+				dialog = gtk.MessageDialog(None,
+							   gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
+							   gtk.MESSAGE_WARNING,
+							   gtk.BUTTONS_OK,
+							   "Invalid parameters!")
+				dialog.run()
+				dialog.destroy()
+				return False
+
+			curr_policy = schedutils.get_scheduler(pid)
+			if curr_policy != new_policy:
+				print "couldn't change pid %d from %s(%d) to %s(%d)!" % \
+				      ( pid, schedutils.schedstr(curr_policy),
+					curr_prio,
+					schedutils.schedstr(new_policy),
+					new_prio)
+			else:
+				changed = True
+
+		curr_affinity = schedutils.get_affinity(pid)
+		try:
+			new_affinity = [ int(a) for a in new_affinity.split(",") ]
+		except:
+			new_affinity = utilist.bitmasklist(new_affinity, self.nr_cpus)
+			
+		new_affinity.sort()
+
+		if curr_affinity != new_affinity:
+			try:
+				schedutils.set_affinity(pid, new_affinity)
+			except:
+				return self.invalid_affinity()
+
+			curr_affinity = schedutils.get_affinity(pid)
+			if curr_affinity != new_affinity:
+				print "couldn't change pid %d from %s to %s!" % \
+				      ( pid, curr_affinity, new_affinity )
+			else:
+				changed = True
+
+		return changed
+
 	def run(self):
-		rc = self.dialog.run()
-		if rc == gtk.RESPONSE_OK:
-			new_policy = self.sched_policy.get_active()
-			new_prio = self.sched_pri.get_value()
+		changed = False
+		if self.dialog.run() == gtk.RESPONSE_OK:
+			new_policy = int(self.sched_policy.get_active())
+			new_prio = int(self.sched_pri.get_value())
 			new_affinity = self.affinity.get_text()
 			if self.just_this_thread.get_active():
-				print "setting just pid %d to policy=%s, prio=%d, affinity=%s" % \
-				      (self.pid, schedutils.schedstr(new_policy),
-				       new_prio, new_affinity)
+				changed = self.set_attributes(self.pid, new_policy,
+							      new_prio, new_affinity)
 			elif self.all_these_threads.get_active():
 				print "setting all threads of pid %d to policy=%s, prio=%d, affinity=%s" % \
 				      (self.pid, schedutils.schedstr(new_policy),
@@ -407,7 +468,7 @@ class process_druid:
 				       new_prio, new_affinity)
 
 		self.dialog.destroy()
-		return rc
+		return changed
 
 class procview:
 
@@ -475,7 +536,7 @@ class procview:
 		self.treeview.show_all()
 		return True
 
-	def refresh(self, a):
+	def refresh(self, a = None):
 		self.ps.reload()
 		self.show(self.ps)
 		return True
@@ -493,7 +554,8 @@ class procview:
 			return
 
 		dialog = process_druid(self.ps, pid, self.nr_cpus)
-		dialog.run()
+		if dialog.run():
+			self.refresh()
 
 	def on_processlist_button_press_event(self, treeview, event):
 		if event.type != gtk.gdk.BUTTON_PRESS or event.button != 3:
@@ -543,6 +605,7 @@ class tuna:
 		gtk.main_quit()
 
 	def show(self):
+		self.cpuview.refresh()
 		self.irqview.show(self.ps)
 		self.procview.show(self.ps)
 

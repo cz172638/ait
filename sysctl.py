@@ -62,6 +62,9 @@ if __name__ == '__main__':
 	print s["net.core.rmem_max"]
 	s["net.core.rmem_max"] = "%s" % (int(s["net.core.rmem_max"]) * 2)
 	print s["net.core.rmem_max"]
+	print s["net.ipv4.tcp_sack"]
+	print s["net.ipv4.tcp_dsack"]
+	print s["net.ipv4.tcp_window_scaling"]
 
 	for i in s.keys():
 		print "%s: %s" % (i, s[i])
