@@ -8,7 +8,7 @@ except:
 	from sqlite import connect as sqlite3_connect
 
 from dbstats import dbstats
-import utilist, rit, os
+import os, rit, time, utilist
 
 metric_captions = {
 	"avg": "Average Latency",
@@ -203,6 +203,7 @@ def get_report_info(db, report, metric):
 	results = get_results(db, metric, report)
 	info = {}
 	info["report"] = report
+	info["ctime"] = db.get_ctime_for_report(report)
 	info["kernel_release"] = db.get_kernel_release_for_report(report)
 	info["libc"] = db.get_libc_release_for_report(report)
 	info["max_report_rate"] = db.get_max_rate_for_report(report)
@@ -248,7 +249,7 @@ def create_html(db, ref, others, field_exclude_list):
 	common_columns = get_common_columns([ ref, ] + others, columns)
 
 	f.write('<h1>Specific Tunings:</h0>\n<table border=1 style="background-color: #8aa;400px; border: thin solid black; font-family: sans-serif; font-size: 10px;">\n<tr>')
-	f.write("<th>report</th><th>max<br>packet<br>rate</th>")
+	f.write("<th>date</th><th>report</th><th>max<br>packet<br>rate</th>")
 	for column in range(len(columns)):
 		if column not in common_columns and columns[column] not in field_exclude_list:
 			f.write("<th>%s</th>" % columns[column].replace("_", "<br>"))
@@ -256,6 +257,7 @@ def create_html(db, ref, others, field_exclude_list):
 	color_index = 0
 	f.write('</tr>\n<tr>')
 
+	f.write('<td>%s</td>' % time.ctime(ref["ctime"]))
 	f.write('<td style="background-color: %s">%s</td>' % (html_colors[colors[color_index]], ref["report"]))
 	f.write('<td>%d</td>' % ref["max_report_rate"])
 	color_index += 1
@@ -270,6 +272,7 @@ def create_html(db, ref, others, field_exclude_list):
 	for other in others:
 		f.write('</tr>\n<tr>')
 
+		f.write('<td>%s</td>' % time.ctime(other["ctime"]))
 		f.write('<td style="background-color: %s">%s</td>' % (html_colors[colors[color_index]], other["report"]))
 		f.write('<td>%d</td>' % other["max_report_rate"])
 		color_index += 1

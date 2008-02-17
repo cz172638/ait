@@ -273,6 +273,13 @@ class dbstats:
 			return int(results[0])
 		return None
 
+	def get_ctime_for_report(self, report):
+		self.cursor.execute('select ctime from report where rowid = %d' % report)
+		results = self.cursor.fetchone()
+		if results:
+			return int(results[0])
+		return None
+
 	def get_kernel_release_for_report(self, report):
 		self.cursor.execute('''
 					select s.kernel_release
