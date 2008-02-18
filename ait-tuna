@@ -489,14 +489,14 @@ class procview:
 	def __init__(self, treeview):
 		self.treeview = treeview
 		self.nr_cpus = procfs.cpuinfo().nr_cpus
-		self.list_store = gtk.ListStore(gobject.TYPE_UINT,
+		self.tree_store = gtk.TreeStore(gobject.TYPE_UINT,
 				      		gobject.TYPE_STRING,
 				      		gobject.TYPE_INT,
 				      		gobject.TYPE_STRING,
 				      		gobject.TYPE_INT,
 				      		gobject.TYPE_INT,
 				      		gobject.TYPE_STRING)
-		self.treeview.set_model(self.list_store)
+		self.treeview.set_model(self.tree_store)
 		renderer = gtk.CellRendererText()
 
 		for col in range(len(self.labels)):
@@ -504,50 +504,67 @@ class procview:
 			column.set_sort_column_id(col)
 			self.treeview.append_column(column)
 
+	def set_thread_columns(self, iter, tid, thread_info):
+		prio = int(thread_info["stat"]["rt_priority"])
+
+		try:
+			sched = schedutils.schedstr(schedutils.get_scheduler(tid))[6:]
+		except SystemError:
+			return True
+
+		thread_affinity_list = schedutils.get_affinity(tid)
+		if len(thread_affinity_list) <= 4:
+			thread_affinity = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
+		else:
+			thread_affinity = utilist.csv(utilist.hexbitmask(thread_affinity_list,
+									 self.nr_cpus), '0x%x')
+		try:
+			voluntary_ctxt_switches = int(thread_info["status"]["voluntary_ctxt_switches"])
+			nonvoluntary_ctxt_switches = int(thread_info["status"]["nonvoluntary_ctxt_switches"])
+		except:
+			voluntary_ctxt_switches = -1
+			nonvoluntary_ctxt_switches = -1
+
+		self.tree_store.set(iter, self.COL_PID, tid,
+					  self.COL_POL, sched,
+					  self.COL_PRI, prio,
+					  self.COL_AFF, thread_affinity,
+					  self.COL_VOLCTXT, voluntary_ctxt_switches,
+					  self.COL_NONVOLCTXT, nonvoluntary_ctxt_switches,
+					  self.COL_NAME, thread_info["stat"]["comm"])
+		return False
+
 	def show(self, ps):
 		self.ps = ps
-		self.list_store.clear()
+		self.tree_store.clear()
 
 		pid_list = ps.keys()
 		pid_list.sort()
 
 		for pid in pid_list:
-			info = self.list_store.append()
-
-			try:
-				sched = schedutils.schedstr(schedutils.get_scheduler(pid))[6:]
-			except SystemError:
+			process_info = self.tree_store.append(None)
+			
+			if self.set_thread_columns(process_info, pid, self.ps[pid]):
 				# Process doesn't exists anymore
-				self.list_store.remove(info)
+				self.tree_store.remove(process_info)
 				continue
 
-			prio = int(ps[pid]["stat"]["rt_priority"])
+			if ps[pid].has_key("threads"):
+				threads = ps[pid]["threads"]
+				tid_list = threads.keys()
+				tid_list.sort()
+				for tid in tid_list:
+					thread_info = self.tree_store.append(process_info)
+					if self.set_thread_columns(thread_info, tid, threads[tid]):
+						# Thread doesn't exists anymore
+						self.tree_store.remove(thread_info)
 
-			thread_affinity_list = schedutils.get_affinity(pid)
-			if len(thread_affinity_list) <= 4:
-				thread_affinity = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
-			else:
-				thread_affinity = utilist.csv(utilist.hexbitmask(thread_affinity_list,
-										 self.nr_cpus), '0x%x')
-			try:
-				voluntary_ctxt_switches = int(ps[pid]["status"]["voluntary_ctxt_switches"])
-				nonvoluntary_ctxt_switches = int(ps[pid]["status"]["nonvoluntary_ctxt_switches"])
-			except:
-				voluntary_ctxt_switches = -1
-				nonvoluntary_ctxt_switches = -1
-
-			self.list_store.set(info, self.COL_PID, pid,
-						  self.COL_POL, sched,
-						  self.COL_PRI, prio,
-						  self.COL_AFF, thread_affinity,
-						  self.COL_VOLCTXT, voluntary_ctxt_switches,
-						  self.COL_NONVOLCTXT, nonvoluntary_ctxt_switches,
-						  self.COL_NAME, ps[pid]["stat"]["comm"])
 		self.treeview.show_all()
 		return True
 
 	def refresh(self, a = None):
 		self.ps.reload()
+		self.ps.reload_threads()
 		self.show(self.ps)
 		return True
 
@@ -558,8 +575,8 @@ class procview:
 		path, col, xpos, ypos = ret
 		if not path:
 			return
-		row = self.list_store.get_iter(path)
-		pid = self.list_store.get_value(row, self.COL_PID)
+		row = self.tree_store.get_iter(path)
+		pid = self.tree_store.get_value(row, self.COL_PID)
 		if not self.ps.has_key(pid):
 			return
 
@@ -608,6 +625,7 @@ class tuna:
 				   "on_irqlist_button_press_event"     : self.irqview.on_irqlist_button_press_event }
 		self.wtree.signal_autoconnect(event_handlers)
 
+		self.ps.reload_threads()
 		self.show()
 		# self.timer = gobject.timeout_add(5000, self.refresh)
 
@@ -621,6 +639,7 @@ class tuna:
 
 	def refresh(self):
 		self.ps.reload()
+		self.ps.reload_threads()
 		self.irqview.refresh(self.ps)
 		self.procview.show(self.ps)
 		return True
