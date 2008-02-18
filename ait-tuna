@@ -328,6 +328,8 @@ class process_druid:
 		self.regex_edit.set_text(process_regex)
 		self.just_this_thread.set_active(True)
 		self.regex_edit.set_sensitive(False)
+		if not ps[pid].has_key("threads"):
+			self.all_these_threads.hide()
 
 	def refresh_match_pids(self, process_regex):
 		self.process_list_store.clear()
@@ -398,10 +400,10 @@ class process_druid:
 		dialog.destroy()
 		return False
 
-	def set_attributes(self, pid, new_policy, new_prio, new_affinity):
+	def set_attributes(self, pid, threads, new_policy, new_prio, new_affinity):
 		changed = False
 		curr_policy = schedutils.get_scheduler(pid)
-		curr_prio = int(self.ps[pid]["stat"]["rt_priority"])
+		curr_prio = int(threads[pid]["stat"]["rt_priority"])
 		if curr_policy != new_policy or curr_prio != new_prio:
 			try:
 				schedutils.set_scheduler(pid, new_policy, new_prio)
@@ -452,7 +454,17 @@ class process_druid:
 		changed = False
 		process_regex = re.compile(regex)
 		for match_pid in self.ps.find_by_regex(process_regex):
-			if self.set_attributes(match_pid, new_policy, new_prio,
+			if self.set_attributes(match_pid, self.ps, new_policy,
+					       new_prio, new_affinity):
+				changed = True
+
+		return changed
+
+	def set_attributes_for_threads(self, pid, new_policy, new_prio, new_affinity):
+		changed = False
+		threads = self.ps[pid]["threads"]
+		for tid in threads.keys():
+			if self.set_attributes(tid, threads, new_policy, new_prio,
 					       new_affinity):
 				changed = True
 
@@ -465,12 +477,20 @@ class process_druid:
 			new_prio = int(self.sched_pri.get_value())
 			new_affinity = self.affinity.get_text()
 			if self.just_this_thread.get_active():
-				changed = self.set_attributes(self.pid, new_policy,
-							      new_prio, new_affinity)
+				changed = self.set_attributes(self.pid,
+							      self.ps,
+							      new_policy,
+							      new_prio,
+							      new_affinity)
 			elif self.all_these_threads.get_active():
-				print "setting all threads of pid %d to policy=%s, prio=%d, affinity=%s" % \
-				      (self.pid, schedutils.schedstr(new_policy),
-				       new_prio, new_affinity)
+				if self.set_attributes(self.pid, self.ps,
+						       new_policy, new_prio,
+						       new_affinity) and \
+				   self.set_attributes_for_threads(self.pid,
+								   new_policy,
+								   new_prio,
+								   new_affinity):
+					changed = True
 			else:
 				changed = self.set_attributes_for_regex(self.regex_edit.get_text(),
 									new_policy,
