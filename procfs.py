@@ -17,12 +17,16 @@ class pidstats:
 			     "rt_priority", "policy",
 			     "delayacct_blkio_ticks" ]
 
-	def __init__(self):
+	def __init__(self, basedir = "/proc"):
+		self.basedir = basedir
 		self.processes = {}
 		self.reload()
 
 	def __getitem__(self, key):
 		return self.processes[key]
+
+	def __delitem__(self, key):
+		del self.processes[key]
 
 	def keys(self):
 		return self.processes.keys()
@@ -31,7 +35,7 @@ class pidstats:
 		return self.processes.has_key(key)
 
 	def read_stat_entry(self, pid):
-		f = open("/proc/%d/stat" % pid)
+		f = open("%s/%d/stat" % (self.basedir, pid))
 		tags = {}
 		fields = f.readline().strip().split()
 		nr_fields = min(len(fields), len(self.proc_stat_fields))
@@ -42,7 +46,7 @@ class pidstats:
 		return tags
 
 	def read_status_entry(self, pid):
-		f = open("/proc/%d/status" % pid)
+		f = open("%s/%d/status" % (self.basedir, pid))
 		tags = {}
 		for line in f.readlines():
 			fields = line.split(":")
@@ -53,7 +57,7 @@ class pidstats:
 	def reload(self):
 		del self.processes
 		self.processes = {}
-		pids = os.listdir("/proc")
+		pids = os.listdir(self.basedir)
 		for spid in pids:
 			try:
 				pid = int(spid)
@@ -71,6 +75,15 @@ class pidstats:
 				self.processes[pid]["status"] = self.read_status_entry(pid)
 			except:
 				del self.processes[pid]
+
+	def reload_threads(self):
+		for pid in self.processes.keys():
+			threads = pidstats("/proc/%d/task/" % pid)
+			# remove thread leader
+			del threads[pid]
+			if not threads.keys():
+				continue
+			self.processes[pid]["threads"] = threads
 
 	def find_by_name(self, name):
 		name = name[:15]
