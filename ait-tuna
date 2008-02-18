@@ -448,6 +448,16 @@ class process_druid:
 
 		return changed
 
+	def set_attributes_for_regex(self, regex, new_policy, new_prio, new_affinity):
+		changed = False
+		process_regex = re.compile(regex)
+		for match_pid in self.ps.find_by_regex(process_regex):
+			if self.set_attributes(match_pid, new_policy, new_prio,
+					       new_affinity):
+				changed = True
+
+		return changed
+
 	def run(self):
 		changed = False
 		if self.dialog.run() == gtk.RESPONSE_OK:
@@ -462,10 +472,10 @@ class process_druid:
 				      (self.pid, schedutils.schedstr(new_policy),
 				       new_prio, new_affinity)
 			else:
-				print "setting all threads that match regex '%s' to policy=%s, prio=%d, affinity=%s" % \
-				      (self.regex_edit.get_text(),
-				       schedutils.schedstr(new_policy),
-				       new_prio, new_affinity)
+				changed = self.set_attributes_for_regex(self.regex_edit.get_text(),
+									new_policy,
+									new_prio,
+									new_affinity)
 
 		self.dialog.destroy()
 		return changed
