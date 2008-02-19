@@ -513,8 +513,9 @@ class process_druid:
 			elif self.all_these_threads.get_active():
 				if self.set_attributes(self.pid, self.ps,
 						       new_policy, new_prio,
-						       new_affinity) and \
-				   self.set_attributes_for_threads(self.pid,
+						       new_affinity):
+					changed = True
+				if self.set_attributes_for_threads(self.pid,
 								   new_policy,
 								   new_prio,
 								   new_affinity):
