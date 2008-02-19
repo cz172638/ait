@@ -836,7 +836,7 @@ class tuna:
 
 		self.ps.reload_threads()
 		self.show()
-		# self.timer = gobject.timeout_add(5000, self.refresh)
+		self.timer = gobject.timeout_add(2000, self.refresh)
 
 	def on_mainbig_window_delete_event(self, obj, event):
 		gtk.main_quit()
@@ -844,7 +844,7 @@ class tuna:
 	def show(self):
 		self.cpuview.refresh()
 		self.irqview.show(self.ps)
-		self.procview.show(self.ps)
+		#self.procview.show(self.ps)
 
 	def refresh(self):
 		self.ps.reload()
