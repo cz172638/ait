@@ -14,6 +14,16 @@ import gtk.glade
 #tuna_glade = "/usr/share/tuna/tuna_gui.glade"
 tuna_glade = "./tuna_gui.glade"
 
+def set_affinity_warning(tid, affinity):
+	dialog = gtk.MessageDialog(None,
+				   gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
+				   gtk.MESSAGE_WARNING,
+				   gtk.BUTTONS_OK,
+				   "Couldn't change the affinity of %d to %s!" % \
+				   (tid, affinity))
+	dialog.run()
+	dialog.destroy()
+
 class cpuview:
 
 	TARGET_STRING = 0
@@ -69,9 +79,19 @@ class cpuview:
 		path, position = drop_info
 		iter = model.get_iter(path)
 		new_affinity = [ model.get_value(iter, self.COL_CPU), ]
-		curr_affinity = schedutils.get_affinity(pid)
-		if curr_affinity != new_affinity:
-			schedutils.set_affinity(pid, new_affinity)
+		changed = False
+		threads = procfs.pidstats("/proc/%d/task" % pid)
+		for tid in threads.keys():
+			curr_affinity = schedutils.get_affinity(tid)
+			if curr_affinity != new_affinity:
+				schedutils.set_affinity(tid, new_affinity)
+				curr_affinity = schedutils.get_affinity(tid)
+				if curr_affinity == new_affinity:
+					changed = True
+				else:
+					set_affinity_warning(tid, new_affinity)
+					
+		if changed:
 			self.procview.refresh()
 
 	def filter_toggled(self, cell, path, model):
