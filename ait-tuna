@@ -14,6 +14,12 @@ import gtk.glade
 #tuna_glade = "/usr/share/tuna/tuna_gui.glade"
 tuna_glade = "./tuna_gui.glade"
 
+def thread_dnd_dict(data):
+	dict = {}
+	for pair in map(lambda b: b.split(":"), data.strip("\n").split("\n")):
+		dict[pair[0]] = pair[1]
+	return dict
+
 def set_affinity_warning(tid, affinity):
 	dialog = gtk.MessageDialog(None,
 				   gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
@@ -72,7 +78,8 @@ class cpuview:
 	def on_drag_data_received_data(self, treeview, context, x, y,
 				       selection, info, etime):
 		model = treeview.get_model()
-		pid = int(selection.data)
+		info = thread_dnd_dict(selection.data)
+		pid = int(info["pid"])
 		drop_info = treeview.get_dest_row_at_pos(x, y)
 		if not drop_info:
 			return
@@ -592,7 +599,11 @@ class procview:
 		treeselection = treeview.get_selection()
 		model, iter = treeselection.get_selected()
 		pid = model.get_value(iter, self.COL_PID)
-		selection.set(selection.target, 8, str(pid))
+		data = ""
+		for stats in [ "stat", "status" ]:
+			for key in self.ps[pid][stats].keys():
+				data += "%s:%s\n" % (key, self.ps[pid][stats][key])
+		selection.set(selection.target, 8, data)
 
 	def set_thread_columns(self, iter, tid, thread_info):
 		prio = int(thread_info["stat"]["rt_priority"])
