@@ -20,6 +20,10 @@ def thread_dnd_dict(data):
 		dict[pair[0]] = pair[1]
 	return dict
 
+# Zombies also doesn't have smaps entries, but it should be good enough
+def iskthread(pid):
+	return procfs.smaps(pid).nr_entries == 0
+
 def set_affinity_warning(tid, affinity):
 	dialog = gtk.MessageDialog(None,
 				   gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
@@ -49,6 +53,7 @@ class cpuview:
 						gobject.TYPE_UINT,
 						gobject.TYPE_UINT)
 		self.treeview.set_model(self.list_store)
+		self.isolcpus = [ False, ] * (len(self.cpustats) - 1)
 		
 		model = self.treeview.get_model()
 
@@ -74,6 +79,77 @@ class cpuview:
 		 		       self.on_drag_data_received_data)
 
 		self.timer = gobject.timeout_add(3000, self.refresh)
+
+	def isolate_cpu(self, a):
+		ret = self.treeview.get_path_at_pos(self.last_x, self.last_y)
+		if not ret:
+			return
+		path, col, xpos, ypos = ret
+		if not path:
+			return
+		row = self.list_store.get_iter(path)
+		cpu = self.list_store.get_value(row, self.COL_CPU)
+		ps = procfs.pidstats()
+		ps.reload_threads()
+		nr_cpus = len(self.cpustats) - 1
+		changed = False
+		for pid in ps.keys():
+			if iskthread(pid):
+				continue
+			affinity = schedutils.get_affinity(pid)
+			if cpu in affinity:
+				affinity.remove(cpu)
+				# If the cpu being isolated was the
+				# only one for this process
+				if not affinity:
+					affinity = range(nr_cpus)
+					affinity.remove(cpu)
+				schedutils.set_affinity(pid, affinity)
+				changed = True
+
+			if not ps[pid].has_key("threads"):
+				continue
+			threads = ps[pid]["threads"]
+			for tid in threads.keys():
+				if iskthread(tid):
+					continue
+				affinity = schedutils.get_affinity(tid)
+				if cpu in affinity:
+					affinity.remove(cpu)
+					# If the cpu being isolated was the
+					# only one for this process
+					if not affinity:
+						affinity = range(nr_cpus)
+						affinity.remove(cpu)
+					schedutils.set_affinity(tid, affinity)
+					changed = True
+
+		if changed:
+			self.procview.refresh()
+
+	def on_cpuview_button_press_event(self, treeview, event):
+		if event.type != gtk.gdk.BUTTON_PRESS or event.button != 3:
+			return
+
+		self.last_x = int(event.x)
+		self.last_y = int(event.y)
+
+		menu = gtk.Menu()
+
+		isolate = gtk.MenuItem("_Isolate CPU")
+		restore = gtk.MenuItem("_Restore CPU")
+
+		menu.add(isolate)
+		menu.add(restore)
+
+		isolate.connect_object('activate', self.isolate_cpu, event)
+		restore.set_sensitive(False)
+		# restore.connect_object('activate', self.restore_cpu, event)
+
+		isolate.show()
+		restore.show()
+
+		menu.popup(None, None, None, event.button, event.time)
 
 	def on_drag_data_received_data(self, treeview, context, x, y,
 				       selection, info, etime):
@@ -723,7 +799,8 @@ class tuna:
 
 		event_handlers = { "on_mainbig_window_delete_event"    : self.on_mainbig_window_delete_event,
 				   "on_processlist_button_press_event" : self.procview.on_processlist_button_press_event,
-				   "on_irqlist_button_press_event"     : self.irqview.on_irqlist_button_press_event }
+				   "on_irqlist_button_press_event"     : self.irqview.on_irqlist_button_press_event,
+				   "on_cpuview_button_press_event"     : self.cpuview.on_cpuview_button_press_event }
 		self.wtree.signal_autoconnect(event_handlers)
 
 		self.ps.reload_threads()
