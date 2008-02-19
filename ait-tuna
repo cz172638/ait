@@ -16,10 +16,18 @@ tuna_glade = "./tuna_gui.glade"
 
 class cpuview:
 
+	TARGET_STRING = 0
+	TARGET_ROOTWIN = 1
+
+	TARGETS = [ ('STRING', 0, TARGET_STRING),
+		    ('text/plain', 0, TARGET_STRING),
+		    ('application/x-rootwin-drop', 0, TARGET_ROOTWIN) ]
+
 	( COL_FILTER, COL_CPU, COL_USAGE ) = range(3)
 
-	def __init__(self, treeview):
+	def __init__(self, treeview, procview):
 		self.cpustats = procfs.cpusstats()
+		self.procview = procview
 		self.treeview = treeview
 		self.list_store = gtk.ListStore(gobject.TYPE_BOOLEAN,
 						gobject.TYPE_UINT,
@@ -44,7 +52,27 @@ class cpuview:
 					    text = self.COL_USAGE, value = self.COL_USAGE)
 		self.treeview.append_column(column)
 
+		self.treeview.enable_model_drag_dest(self.TARGETS,
+						     gtk.gdk.ACTION_DEFAULT)
+		self.treeview.connect("drag_data_received",
+		 		       self.on_drag_data_received_data)
+
 		self.timer = gobject.timeout_add(3000, self.refresh)
+
+	def on_drag_data_received_data(self, treeview, context, x, y,
+				       selection, info, etime):
+		model = treeview.get_model()
+		pid = int(selection.data)
+		drop_info = treeview.get_dest_row_at_pos(x, y)
+		if not drop_info:
+			return
+		path, position = drop_info
+		iter = model.get_iter(path)
+		new_affinity = [ model.get_value(iter, self.COL_CPU), ]
+		curr_affinity = schedutils.get_affinity(pid)
+		if curr_affinity != new_affinity:
+			schedutils.set_affinity(pid, new_affinity)
+			self.procview.refresh()
 
 	def filter_toggled(self, cell, path, model):
 		# get toggled iter
@@ -502,6 +530,13 @@ class process_druid:
 
 class procview:
 
+	TARGET_STRING = 0
+	TARGET_ROOTWIN = 1
+
+	TARGETS = [ ('STRING', 0, TARGET_STRING),
+		    ('text/plain', 0, TARGET_STRING),
+		    ('application/x-rootwin-drop', 0, TARGET_ROOTWIN) ]
+
 	( COL_PID, COL_POL, COL_PRI, COL_AFF, COL_VOLCTXT, COL_NONVOLCTXT, COL_NAME ) = range(7)
 	labels = [ "PID", "Policy", "Priority", "Affinity",
 		   "VolCtxtSwitch", "NonVolCtxtSwitch", "Name" ]
@@ -519,10 +554,24 @@ class procview:
 		self.treeview.set_model(self.tree_store)
 		renderer = gtk.CellRendererText()
 
+		# Allow enable drag and drop of rows including row move
+		self.treeview.enable_model_drag_source(gtk.gdk.BUTTON1_MASK,
+						       self.TARGETS,
+						       gtk.gdk.ACTION_DEFAULT | gtk.gdk.ACTION_MOVE)
+		self.treeview.connect("drag_data_get", self.on_drag_data_get_data)
+		self.treeview.drag_source_set_icon_stock(gtk.STOCK_NETWORK)
+
 		for col in range(len(self.labels)):
 			column = gtk.TreeViewColumn(self.labels[col], renderer, text = col)
 			column.set_sort_column_id(col)
 			self.treeview.append_column(column)
+
+	def on_drag_data_get_data(self, treeview, context,
+			          selection, target_id, etime):
+		treeselection = treeview.get_selection()
+		model, iter = treeselection.get_selected()
+		pid = model.get_value(iter, self.COL_PID)
+		selection.set(selection.target, 8, str(pid))
 
 	def set_thread_columns(self, iter, tid, thread_info):
 		prio = int(thread_info["stat"]["rt_priority"])
@@ -636,9 +685,9 @@ class tuna:
 		self.irqs = procfs.interrupts()
 		self.wtree = gtk.glade.XML(tuna_glade, "mainbig_window")
 
-		self.cpuview = cpuview(self.wtree.get_widget("cpuview"))
-		self.irqview = irqview(self.wtree.get_widget("irqlist"), self.irqs)
 		self.procview = procview(self.wtree.get_widget("processlist"))
+		self.cpuview = cpuview(self.wtree.get_widget("cpuview"), self.procview)
+		self.irqview = irqview(self.wtree.get_widget("irqlist"), self.irqs)
 
 		event_handlers = { "on_mainbig_window_delete_event"    : self.on_mainbig_window_delete_event,
 				   "on_processlist_button_press_event" : self.procview.on_processlist_button_press_event,
