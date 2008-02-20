@@ -23,13 +23,21 @@ tuna_glade = "./tuna_gui.glade"
 
 # Zombies also doesn't have smaps entries, but it should be good enough
 def iskthread(pid):
-	return procfs.smaps(pid).nr_entries == 0
+	try:
+		return procfs.smaps(pid).nr_entries == 0
+	except IOError:
+		# Thread has vanished
+		return True
 
 def set_irq_affinity(irq, bitmasklist):
 	text = reduce(lambda a, b: a + ",%x" % b, bitmasklist)
 	f = file("/proc/irq/%d/smp_affinity" % irq, "w")
 	f.write("%s\n" % text)
-	f.close()
+	try:
+		f.close()
+	except IOError:
+		# This happens with IRQ 0, for instance
+		pass
 
 def set_affinity_warning(tid, affinity):
 	dialog = gtk.MessageDialog(None,
@@ -78,6 +86,14 @@ def move_irqs_to_cpu(cpu, data):
 	# its only an optimization to avoid a needless refresh
 	# in the irqview, now we always refresh.
 	return True
+
+def affinity_remove_cpu(affinity, cpu, nr_cpus):
+	# If the cpu being isolated was the only one in the current affinity
+	affinity.remove(cpu)
+	if not affinity:
+		affinity = range(nr_cpus)
+		affinity.remove(cpu)
+	return affinity
 
 class cpuview:
 
@@ -140,12 +156,7 @@ class cpuview:
 				continue
 			affinity = schedutils.get_affinity(pid)
 			if cpu in affinity:
-				affinity.remove(cpu)
-				# If the cpu being isolated was the
-				# only one for this process
-				if not affinity:
-					affinity = range(nr_cpus)
-					affinity.remove(cpu)
+				affinity = affinity_remove_cpu(affinity, cpu, nr_cpus)
 				schedutils.set_affinity(pid, affinity)
 				changed = True
 
@@ -168,6 +179,27 @@ class cpuview:
 
 		if changed:
 			self.procview.refresh()
+
+		del ps
+		
+		# Now isolate it from IRQs too
+		changed = False
+		irqs = procfs.interrupts()
+		for irq in irqs.keys():
+			# LOC, NMI, TLB, etc
+			if not irqs[irq].has_key("affinity"):
+				continue
+			affinity = irqs[irq]["affinity"]
+			if cpu in affinity:
+				affinity = affinity_remove_cpu(affinity,
+							       cpu, nr_cpus)
+				set_irq_affinity(int(irq),
+						 utilist.hexbitmask(affinity,
+						 		    nr_cpus))
+				changed = True
+
+		if changed:
+			self.irqview.refresh()
 
 	def on_cpuview_button_press_event(self, treeview, event):
 		if event.type != gtk.gdk.BUTTON_PRESS or event.button != 3:
@@ -279,7 +311,7 @@ def invalid_affinity():
 	dialog.destroy()
 	return False
 
-def thread_set_attributes(pid, threads, new_policy, new_prio, new_affinity):
+def thread_set_attributes(pid, threads, new_policy, new_prio, new_affinity, nr_cpus):
 	changed = False
 	curr_policy = schedutils.get_scheduler(pid)
 	curr_prio = int(threads[pid]["stat"]["rt_priority"])
@@ -310,7 +342,7 @@ def thread_set_attributes(pid, threads, new_policy, new_prio, new_affinity):
 	try:
 		new_affinity = [ int(a) for a in new_affinity.split(",") ]
 	except:
-		new_affinity = utilist.bitmasklist(new_affinity, self.nr_cpus)
+		new_affinity = utilist.bitmasklist(new_affinity, nr_cpus)
 		
 	new_affinity.sort()
 
@@ -402,7 +434,8 @@ class irq_druid:
 				if thread_set_attributes(pids[0], self.ps,
 							 new_policy,
 							 new_prio,
-							 new_affinity):
+							 new_affinity,
+							 self.irqs.nr_cpus):
 					changed = True
 
 			try:
@@ -661,7 +694,8 @@ class process_druid:
 		process_regex = re.compile(regex)
 		for match_pid in self.ps.find_by_regex(process_regex):
 			if thread_set_attributes(match_pid, self.ps, new_policy,
-						 new_prio, new_affinity):
+						 new_prio, new_affinity,
+						 self.nr_cpus):
 				changed = True
 
 		return changed
@@ -671,7 +705,7 @@ class process_druid:
 		threads = self.ps[pid]["threads"]
 		for tid in threads.keys():
 			if thread_set_attributes(tid, threads, new_policy, new_prio,
-						 new_affinity):
+						 new_affinity, self.nr_cpus):
 				changed = True
 
 		return changed
@@ -687,11 +721,13 @@ class process_druid:
 								self.ps,
 								new_policy,
 								new_prio,
-								new_affinity)
+								new_affinity,
+								self.nr_cpus)
 			elif self.all_these_threads.get_active():
 				if thread_set_attributes(self.pid, self.ps,
 							 new_policy, new_prio,
-							 new_affinity):
+							 new_affinity,
+							 self.nr_cpus):
 					changed = True
 				if self.set_attributes_for_threads(self.pid,
 								   new_policy,
