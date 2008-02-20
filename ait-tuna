@@ -682,6 +682,7 @@ class process_druid:
 		try:
 			cmdline_regex = re.compile(process_regex_text)
 		except:
+			self.process_list_store.clear()
 			return
 		self.refresh_match_pids(cmdline_regex)
 
