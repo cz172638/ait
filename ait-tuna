@@ -511,6 +511,30 @@ class irqview:
 		selection.set(selection.target, 8,
 			      "irq:%s" % utilist.csv(irq_list, "%d"))
 
+
+	def set_irq_columns(self, iter, irq, irq_info, nics):
+		users = get_irq_users(self.irqs, irq, nics)
+		pids = self.ps.find_by_name("IRQ-%d" % irq)
+		if pids:
+			pid = pids[0]
+			prio = int(self.ps[pid]["stat"]["rt_priority"])
+			sched = schedutils.schedstr(schedutils.get_scheduler(pid))[6:]
+		else:
+			sched = ""
+			pid = -1
+			prio = -1
+
+		affinity_text = get_irq_affinity_text(self.irqs, irq)
+		events = reduce(lambda a, b: a + b, irq_info["cpu"])
+
+		self.list_store.set(iter, self.COL_NUM, irq,
+					  self.COL_PID, pid,
+					  self.COL_POL, sched,
+					  self.COL_PRI, prio,
+					  self.COL_AFF, affinity_text,
+					  self.COL_EVENTS, events,
+					  self.COL_USERS, utilist.csv(users, '%s'))
+
 	def show(self, ps):
 		self.ps = ps
 		self.list_store.clear()
@@ -525,31 +549,11 @@ class irqview:
 		nics = ethtool.get_active_devices()
 
 		irq_list.sort()
-		for irqnr in irq_list:
-			info = self.list_store.append()
-			irq = self.irqs[irqnr]
-			users = get_irq_users(self.irqs, irqnr, nics)
+		for irq in irq_list:
+			row = self.list_store.append()
+			irq_info = self.irqs[irq]
+			self.set_irq_columns(row, irq, irq_info, nics)
 
-			pids = ps.find_by_name("IRQ-%d" % irqnr)
-			if pids:
-				pid = pids[0]
-				prio = int(ps[pid]["stat"]["rt_priority"])
-				sched = schedutils.schedstr(schedutils.get_scheduler(pid))[6:]
-			else:
-				sched = ""
-				pid = -1
-				prio = -1
-
-			affinity_text = get_irq_affinity_text(self.irqs, irqnr)
-			events = reduce(lambda a, b: a + b, irq["cpu"])
-
-			self.list_store.set(info, self.COL_NUM, irqnr,
-						  self.COL_PID, pid,
-						  self.COL_POL, sched,
-						  self.COL_PRI, prio,
-						  self.COL_AFF, affinity_text,
-						  self.COL_EVENTS, events,
-						  self.COL_USERS, utilist.csv(users, '%s'))
 		self.treeview.show_all()
 	
 	def refresh(self, ps = None):
