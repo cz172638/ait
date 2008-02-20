@@ -840,35 +840,69 @@ class procview:
 
 	def show(self, ps):
 		self.ps = ps
-		self.tree_store.clear()
 
-		pid_list = ps.keys()
-		pid_list.sort()
-
-		for pid in pid_list:
-			process_info = self.tree_store.append(None)
-			
-			if self.set_thread_columns(process_info, pid, self.ps[pid]):
-				# Process doesn't exists anymore
-				self.tree_store.remove(process_info)
-				continue
-
-			if ps[pid].has_key("threads"):
-				threads = ps[pid]["threads"]
-				tid_list = threads.keys()
-				tid_list.sort()
-				for tid in tid_list:
-					thread_info = self.tree_store.append(process_info)
-					if self.set_thread_columns(thread_info, tid, threads[tid]):
-						# Thread doesn't exists anymore
-						self.tree_store.remove(thread_info)
-
+		# Start with the first row, if there is one, on the
+		# process list. If the first time update_rows will just
+		# have everthing in new_tids and append_new_tids will
+		# create the rows.
+		row = self.tree_store.get_iter_first()
+		self.update_rows(self.ps, row, None)
 		self.treeview.show_all()
 		return True
+	
+	def update_rows(self, threads, row, parent_row):
+		new_tids = threads.keys()
+		while row:
+			tid = self.tree_store.get_value(row, self.COL_PID)
+			if not threads.has_key(tid):
+				if self.tree_store.remove(row):
+					# removed and now row is the next one
+					continue
+				# removed and its the last one
+				break
+			else:
+				new_tids.remove(tid)
+				self.set_thread_columns(row, tid, threads[tid])
+
+				if threads[tid].has_key("threads"):
+					children = threads[tid]["threads"]
+				else:
+					children = {}
+				
+				child_row = self.tree_store.iter_children(row)
+				self.update_rows(children, child_row, row)
+			
+			row = self.tree_store.iter_next(row)
+
+		new_tids.sort()
+		self.append_new_tids(parent_row, threads, new_tids)
+
+	def append_new_tids(self, parent_row, threads, tid_list):
+		for tid in tid_list:
+			row = self.tree_store.append(parent_row)
+			
+			if self.set_thread_columns(row, tid, threads[tid]):
+				# Thread doesn't exists anymore
+				self.tree_store.remove(row)
+				continue
+
+			if threads[tid].has_key("threads"):
+				children = threads[tid]["threads"]
+				children_list = children.keys()
+				children_list.sort()
+				for child in children_list:
+					child_row = self.tree_store.append(row)
+					if self.set_thread_columns(child_row,
+								   child,
+								   children[child]):
+						# Thread doesn't exists anymore
+						self.tree_store.remove(child_row)
 
 	def refresh(self, a = None):
 		self.ps.reload()
 		self.ps.reload_threads()
+		self.ps.load_cmdline()
+
 		self.show(self.ps)
 		return True
 
