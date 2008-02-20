@@ -4,6 +4,12 @@
 
 import os, time, utilist
 
+def process_cmdline(pid_info):
+	if pid_info.has_key("cmdline"):
+		return reduce(lambda a, b: a + " %s" % b, pid_info["cmdline"])
+
+	return pid_info["stat"]["comm"]
+
 class pidstats:
 	proc_stat_fields = [ "pid", "comm", "state", "ppid", "pgrp", "session",
 			     "tty_nr", "tpgid", "flags", "minflt", "cminflt",
@@ -85,6 +91,16 @@ class pidstats:
 				continue
 			self.processes[pid]["threads"] = threads
 
+	def load_cmdline(self):
+		for pid in self.processes.keys():
+			if self.processes[pid].has_key("cmdline"):
+				continue
+			f = file("/proc/%d/cmdline" % pid)
+			line = f.readline()
+			if line:
+				self.processes[pid]["cmdline"] = line.strip().split('\0')
+			f.close()
+
 	def find_by_name(self, name):
 		name = name[:15]
 		pids = []
@@ -97,6 +113,13 @@ class pidstats:
 		pids = []
 		for pid in self.processes.keys():
 			if regex.match(self.processes[pid]["stat"]["comm"]):
+				pids.append(pid)
+		return pids
+
+	def find_by_cmdline_regex(self, regex):
+		pids = []
+		for pid in self.processes.keys():
+			if regex.match(process_cmdline(self.processes[pid])):
 				pids.append(pid)
 		return pids
 
