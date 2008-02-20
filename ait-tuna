@@ -37,7 +37,8 @@ def set_irq_affinity(irq, bitmasklist):
 		f.close()
 	except IOError:
 		# This happens with IRQ 0, for instance
-		pass
+		return False
+	return True
 
 def set_affinity_warning(tid, affinity):
 	dialog = gtk.MessageDialog(None,
@@ -95,6 +96,51 @@ def affinity_remove_cpu(affinity, cpu, nr_cpus):
 		affinity.remove(cpu)
 	return affinity
 
+def isolate_cpu(cpu, nr_cpus):
+	ps = procfs.pidstats()
+	ps.reload_threads()
+	ps_changed = False
+	for pid in ps.keys():
+		if iskthread(pid):
+			continue
+		affinity = schedutils.get_affinity(pid)
+		if cpu in affinity:
+			affinity = affinity_remove_cpu(affinity, cpu, nr_cpus)
+			schedutils.set_affinity(pid, affinity)
+			ps_changed = True
+
+		if not ps[pid].has_key("threads"):
+			continue
+		threads = ps[pid]["threads"]
+		for tid in threads.keys():
+			if iskthread(tid):
+				continue
+			affinity = schedutils.get_affinity(tid)
+			if cpu in affinity:
+				affinity = affinity_remove_cpu(affinity, cpu, nr_cpus)
+				schedutils.set_affinity(tid, affinity)
+				ps_changed = True
+
+	del ps
+	
+	# Now isolate it from IRQs too
+	irqs_changed = False
+	irqs = procfs.interrupts()
+	for irq in irqs.keys():
+		# LOC, NMI, TLB, etc
+		if not irqs[irq].has_key("affinity"):
+			continue
+		affinity = irqs[irq]["affinity"]
+		if cpu in affinity:
+			affinity = affinity_remove_cpu(affinity,
+						       cpu, nr_cpus)
+			if set_irq_affinity(int(irq),
+					    utilist.hexbitmask(affinity,
+							       nr_cpus)):
+				irqs_changed = True
+
+	return (ps_changed, irqs_changed)
+
 class cpuview:
 
 	( COL_FILTER, COL_CPU, COL_USAGE ) = range(3)
@@ -147,59 +193,23 @@ class cpuview:
 			return
 		row = self.list_store.get_iter(path)
 		cpu = self.list_store.get_value(row, self.COL_CPU)
-		ps = procfs.pidstats()
-		ps.reload_threads()
 		nr_cpus = len(self.cpustats) - 1
-		changed = False
-		for pid in ps.keys():
-			if iskthread(pid):
-				continue
-			affinity = schedutils.get_affinity(pid)
-			if cpu in affinity:
-				affinity = affinity_remove_cpu(affinity, cpu, nr_cpus)
-				schedutils.set_affinity(pid, affinity)
-				changed = True
+		safety_counter = 10
+		while True:
+			if safety_counter == 0:
+				print "safety counter warning!"
+				break
+			safety_counter -= 1
+			ps_changed, irqs_changed = isolate_cpu(cpu, nr_cpus)
 
-			if not ps[pid].has_key("threads"):
-				continue
-			threads = ps[pid]["threads"]
-			for tid in threads.keys():
-				if iskthread(tid):
-					continue
-				affinity = schedutils.get_affinity(tid)
-				if cpu in affinity:
-					affinity.remove(cpu)
-					# If the cpu being isolated was the
-					# only one for this process
-					if not affinity:
-						affinity = range(nr_cpus)
-						affinity.remove(cpu)
-					schedutils.set_affinity(tid, affinity)
-					changed = True
+			if ps_changed:
+				self.procview.refresh()
 
-		if changed:
-			self.procview.refresh()
+			if irqs_changed:
+				self.irqview.refresh()
 
-		del ps
-		
-		# Now isolate it from IRQs too
-		changed = False
-		irqs = procfs.interrupts()
-		for irq in irqs.keys():
-			# LOC, NMI, TLB, etc
-			if not irqs[irq].has_key("affinity"):
-				continue
-			affinity = irqs[irq]["affinity"]
-			if cpu in affinity:
-				affinity = affinity_remove_cpu(affinity,
-							       cpu, nr_cpus)
-				set_irq_affinity(int(irq),
-						 utilist.hexbitmask(affinity,
-						 		    nr_cpus))
-				changed = True
-
-		if changed:
-			self.irqview.refresh()
+			if not (ps_changed or irqs_changed):
+				break
 
 	def on_cpuview_button_press_event(self, treeview, event):
 		if event.type != gtk.gdk.BUTTON_PRESS or event.button != 3:
