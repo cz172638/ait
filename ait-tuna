@@ -467,9 +467,9 @@ class irq_druid:
 
 class irqview:
 
-	( COL_NUM, COL_PID, COL_POL, COL_PRI, COL_AFF, COL_EVENTS, COL_NAME ) = range(7)
+	( COL_NUM, COL_PID, COL_POL, COL_PRI, COL_AFF, COL_EVENTS, COL_USERS ) = range(7)
 	labels = [ "IRQ", "PID", "Policy", "Priority", "Affinity",
-		   "Events", "Name" ]
+		   "Events", "Users" ]
 
 	def __init__(self, treeview, irqs):
 		self.irqs = irqs
@@ -549,7 +549,7 @@ class irqview:
 						  self.COL_PRI, prio,
 						  self.COL_AFF, affinity_text,
 						  self.COL_EVENTS, events,
-						  self.COL_NAME, utilist.csv(users, '%s'))
+						  self.COL_USERS, utilist.csv(users, '%s'))
 		self.treeview.show_all()
 	
 	def refresh(self, ps = None):
@@ -624,7 +624,7 @@ class process_druid:
 		processes = self.window.get_widget("matching_process_list")
 
 		self.sched_pri.set_value(int(pid_info["stat"]["rt_priority"]))
-		process_regex = pid_info["stat"]["comm"]
+		cmdline_regex = procfs.process_cmdline(pid_info)
 		affinity_list = schedutils.get_affinity(pid)
 		if len(affinity_list) <= 4:
 			self.affinity_text = ("%s" % affinity_list)[1:-1].replace(" ", "")
@@ -635,18 +635,21 @@ class process_druid:
 		self.create_matching_process_model(processes)
 		self.create_policy_model(self.sched_policy)
 		self.sched_policy.set_active(schedutils.get_scheduler(pid))
-		self.regex_edit.set_text(process_regex)
+		self.regex_edit.set_text(cmdline_regex)
 		self.just_this_thread.set_active(True)
 		self.regex_edit.set_sensitive(False)
 		if not ps[pid].has_key("threads"):
 			self.all_these_threads.hide()
 
-	def refresh_match_pids(self, process_regex):
+	def refresh_match_pids(self, cmdline_regex):
 		self.process_list_store.clear()
-		for match_pid in self.ps.find_by_regex(process_regex):
+		for match_pid in self.ps.find_by_cmdline_regex(cmdline_regex):
 			info = self.process_list_store.append()
+			pid_info = self.ps[match_pid]
+			cmdline = procfs.process_cmdline(pid_info)
 			self.process_list_store.set(info, self.PROCESS_COL_PID, match_pid,
-						    self.PROCESS_COL_NAME, self.ps[match_pid]["stat"]["comm"])
+						    self.PROCESS_COL_NAME,
+						    cmdline)
 
 	def create_matching_process_model(self, processes):
 		labels = [ "PID", "Name" ]
@@ -676,8 +679,11 @@ class process_druid:
 
 	def on_cmdline_regex_changed(self, entry):
 		process_regex_text = entry.get_text()
-		process_regex = re.compile(process_regex_text)
-		self.refresh_match_pids(process_regex)
+		try:
+			cmdline_regex = re.compile(process_regex_text)
+		except:
+			return
+		self.refresh_match_pids(cmdline_regex)
 
 	def on_just_this_thread_clicked(self, button):
 		self.regex_edit.set_sensitive(False)
@@ -701,8 +707,8 @@ class process_druid:
 
 	def set_attributes_for_regex(self, regex, new_policy, new_prio, new_affinity):
 		changed = False
-		process_regex = re.compile(regex)
-		for match_pid in self.ps.find_by_regex(process_regex):
+		cmdline_regex = re.compile(regex)
+		for match_pid in self.ps.find_by_cmdline_regex(cmdline_regex):
 			if thread_set_attributes(match_pid, self.ps, new_policy,
 						 new_prio, new_affinity,
 						 self.nr_cpus):
@@ -755,9 +761,9 @@ class process_druid:
 
 class procview:
 
-	( COL_PID, COL_POL, COL_PRI, COL_AFF, COL_VOLCTXT, COL_NONVOLCTXT, COL_NAME ) = range(7)
+	( COL_PID, COL_POL, COL_PRI, COL_AFF, COL_VOLCTXT, COL_NONVOLCTXT, COL_CMDLINE ) = range(7)
 	labels = [ "PID", "Policy", "Priority", "Affinity",
-		   "VolCtxtSwitch", "NonVolCtxtSwitch", "Name" ]
+		   "VolCtxtSwitch", "NonVolCtxtSwitch", "Command Line" ]
 
 	def __init__(self, treeview):
 		self.treeview = treeview
@@ -820,13 +826,15 @@ class procview:
 			voluntary_ctxt_switches = -1
 			nonvoluntary_ctxt_switches = -1
 
+		cmdline = procfs.process_cmdline(thread_info)
+
 		self.tree_store.set(iter, self.COL_PID, tid,
 					  self.COL_POL, sched,
 					  self.COL_PRI, prio,
 					  self.COL_AFF, thread_affinity,
 					  self.COL_VOLCTXT, voluntary_ctxt_switches,
 					  self.COL_NONVOLCTXT, nonvoluntary_ctxt_switches,
-					  self.COL_NAME, thread_info["stat"]["comm"])
+					  self.COL_CMDLINE, cmdline)
 		return False
 
 	def show(self, ps):
@@ -923,6 +931,7 @@ class tuna:
 		self.wtree.signal_autoconnect(event_handlers)
 
 		self.ps.reload_threads()
+		self.ps.load_cmdline()
 		self.show()
 		# self.timer = gobject.timeout_add(2000, self.irqview.refresh)
 
@@ -938,6 +947,7 @@ class tuna:
 		self.ps.reload()
 		self.ps.reload_threads()
 		self.irqview.refresh(self.ps)
+		self.ps.load_cmdline()
 		self.procview.show(self.ps)
 		return True
 
