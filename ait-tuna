@@ -537,19 +537,35 @@ class irqview:
 
 	def show(self, ps):
 		self.ps = ps
-		self.list_store.clear()
 
-		irq_list = []
+		new_irqs = []
 		for sirq in self.irqs.keys():
 			try:
-				irq_list.append(int(sirq))
+				new_irqs.append(int(sirq))
 			except:
 				continue
 
 		nics = ethtool.get_active_devices()
 
-		irq_list.sort()
-		for irq in irq_list:
+		row = self.list_store.get_iter_first()
+		while row:
+			irq = self.list_store.get_value(row, self.COL_NUM)
+			# IRQ was unregistered? I.e. driver unloaded?
+			if not self.irqs.has_key(irq):
+				if self.list_store.remove(row):
+					# removed and row now its the next one
+					continue
+				# Was the last one
+				break
+			else:
+				new_irqs.remove(irq)
+				irq_info = self.irqs[irq]
+				self.set_irq_columns(row, irq, irq_info, nics)
+
+			row = self.list_store.iter_next(row)
+
+		new_irqs.sort()
+		for irq in new_irqs:
 			row = self.list_store.append()
 			irq_info = self.irqs[irq]
 			self.set_irq_columns(row, irq, irq_info, nics)
@@ -972,7 +988,7 @@ class tuna:
 		self.ps.reload_threads()
 		self.ps.load_cmdline()
 		self.show()
-		self.timer = gobject.timeout_add(2000, self.procview.refresh)
+		self.timer = gobject.timeout_add(2500, self.refresh)
 
 	def on_mainbig_window_delete_event(self, obj, event):
 		gtk.main_quit()
