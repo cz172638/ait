@@ -881,7 +881,13 @@ class procview:
 				# removed and its the last one
 				break
 			else:
-				new_tids.remove(tid)
+				try:
+					new_tids.remove(tid)
+				except:
+					# FIXME: understand in what situation this
+					# can happen, seems harmless from visual
+					# inspection.
+					pass
 				self.set_thread_columns(row, tid, threads[tid])
 
 				if threads[tid].has_key("threads"):
