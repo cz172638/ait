@@ -6,7 +6,7 @@ import os, time, utilist
 
 def process_cmdline(pid_info):
 	if pid_info.has_key("cmdline"):
-		return reduce(lambda a, b: a + " %s" % b, pid_info["cmdline"])
+		return reduce(lambda a, b: a + " %s" % b, pid_info["cmdline"]).strip()
 
 	return pid_info["stat"]["comm"]
 
@@ -32,7 +32,11 @@ class pidstats:
 		return self.processes[key]
 
 	def __delitem__(self, key):
-		del self.processes[key]
+		# not clear on why this can fail, but it can
+		try:
+			del self.processes[key]
+		except:
+			pass
 
 	def keys(self):
 		return self.processes.keys()
