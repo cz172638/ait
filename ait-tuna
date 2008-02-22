@@ -5,7 +5,7 @@
 import pygtk
 pygtk.require("2.0")
 
-import ethtool, gtk, gobject, os, procfs, re, schedutils, sys, utilist
+import ethtool, gtk, gobject, os, pango, procfs, re, schedutils, sys, utilist
 import gtk.glade
 
 # FIXME: should go to python-schedutils
@@ -140,6 +140,24 @@ def isolate_cpu(cpu, nr_cpus):
 				irqs_changed = True
 
 	return (ps_changed, irqs_changed)
+
+def set_store_columns(store, row, new_value):
+	nr_columns = len(new_value)
+	for col in range(nr_columns):
+		col_weight = col + nr_columns
+		cur_value = store.get_value(row, col)
+		if cur_value == new_value[col]:
+			new_weight = pango.WEIGHT_NORMAL
+		else:
+			cur_weight = store.get_value(row, col_weight)
+			if cur_weight == pango.WEIGHT_NORMAL:
+				new_weight = pango.WEIGHT_SEMIBOLD
+			elif cur_weight == pango.WEIGHT_SEMIBOLD:
+				new_weight = pango.WEIGHT_BOLD
+			else:
+				new_weight = pango.WEIGHT_ULTRABOLD
+
+		store.set(row, col, new_value[col], col_weight, new_weight)
 
 class cpuview:
 
@@ -467,20 +485,29 @@ class irq_druid:
 
 class irqview:
 
-	( COL_NUM, COL_PID, COL_POL, COL_PRI, COL_AFF, COL_EVENTS, COL_USERS ) = range(7)
+	nr_columns = 7
+	( COL_NUM, COL_PID, COL_POL, COL_PRI,
+	  COL_AFF, COL_EVENTS, COL_USERS ) = range(nr_columns)
 	labels = [ "IRQ", "PID", "Policy", "Priority", "Affinity",
 		   "Events", "Users" ]
 
 	def __init__(self, treeview, irqs):
 		self.irqs = irqs
 		self.treeview = treeview
-		self.list_store = gtk.ListStore(gobject.TYPE_UINT,
-				      		gobject.TYPE_INT,
-				      		gobject.TYPE_STRING,
-				      		gobject.TYPE_INT,
-				      		gobject.TYPE_STRING,
-				      		gobject.TYPE_UINT,
-				      		gobject.TYPE_STRING)
+		self.list_store = gtk.ListStore(gobject.TYPE_UINT,   # COL_NUM
+				      		gobject.TYPE_INT,    # COL_PID
+				      		gobject.TYPE_STRING, # COL_POL
+				      		gobject.TYPE_INT,    # COL_PRI
+				      		gobject.TYPE_STRING, # COL_AFF
+				      		gobject.TYPE_UINT,   # COL_EVENTS
+				      		gobject.TYPE_STRING, # COL_USERS
+						gobject.TYPE_UINT,   # COL_NUM weight
+				      		gobject.TYPE_UINT,   # COL_PID weight
+				      		gobject.TYPE_UINT,   # COL POL weight
+				      		gobject.TYPE_UINT,   # COL_PRI weight
+				      		gobject.TYPE_UINT,   # COL_AFF weight
+				      		gobject.TYPE_UINT,   # COL_EVENTS weight
+				      		gobject.TYPE_UINT)   # COL_USERS weight
 		self.treeview.set_model(self.list_store)
 
 		# Allow selecting multiple rows
@@ -492,11 +519,14 @@ class irqview:
 						       DND_TARGETS,
 						       gtk.gdk.ACTION_DEFAULT | gtk.gdk.ACTION_MOVE)
 		self.treeview.connect("drag_data_get", self.on_drag_data_get_data)
-		renderer = gtk.CellRendererText()
+		self.renderer = gtk.CellRendererText()
 
-		for col in range(len(self.labels)):
-			column = gtk.TreeViewColumn(self.labels[col], renderer, text = col)
+		for col in range(self.nr_columns):
+			column = gtk.TreeViewColumn(self.labels[col],
+						    self.renderer, text = col)
 			column.set_sort_column_id(col)
+			column.add_attribute(self.renderer, "weight",
+					     col + self.nr_columns)
 			self.treeview.append_column(column)
 
 	def foreach_selected_cb(self, model, path, iter, irq_list):
@@ -524,7 +554,7 @@ class irqview:
 			pid = -1
 			prio = -1
 
-		new_value = [ None ] * len(self.labels)
+		new_value = [ None ] * self.nr_columns
 		new_value[self.COL_NUM] = irq
 		new_value[self.COL_PID] = pid
 		new_value[self.COL_POL] = sched
@@ -533,8 +563,7 @@ class irqview:
 		new_value[self.COL_EVENTS] = reduce(lambda a, b: a + b, irq_info["cpu"])
 		new_value[self.COL_USERS] = utilist.csv(users, '%s')
 
-		for col in range(len(self.labels)):
-			self.list_store.set(iter, col, new_value[col])
+		set_store_columns(self.list_store, iter, new_value)
 
 	def show(self, ps):
 		self.ps = ps
@@ -783,7 +812,8 @@ class process_druid:
 
 class procview:
 
-	( COL_PID, COL_POL, COL_PRI, COL_AFF, COL_VOLCTXT, COL_NONVOLCTXT, COL_CMDLINE ) = range(7)
+	nr_columns = 7
+	( COL_PID, COL_POL, COL_PRI, COL_AFF, COL_VOLCTXT, COL_NONVOLCTXT, COL_CMDLINE ) = range(nr_columns)
 	labels = [ "PID", "Policy", "Priority", "Affinity",
 		   "VolCtxtSwitch", "NonVolCtxtSwitch", "Command Line" ]
 
@@ -796,7 +826,14 @@ class procview:
 				      		gobject.TYPE_STRING,
 				      		gobject.TYPE_INT,
 				      		gobject.TYPE_INT,
-				      		gobject.TYPE_STRING)
+				      		gobject.TYPE_STRING,
+						gobject.TYPE_UINT,   # text weights (BOLD, etc)
+				      		gobject.TYPE_UINT,
+				      		gobject.TYPE_UINT,
+				      		gobject.TYPE_UINT,
+				      		gobject.TYPE_UINT,
+				      		gobject.TYPE_UINT,
+				      		gobject.TYPE_UINT)
 		self.treeview.set_model(self.tree_store)
 
 		# Allow selecting multiple rows
@@ -809,9 +846,12 @@ class procview:
 						       gtk.gdk.ACTION_DEFAULT | gtk.gdk.ACTION_MOVE)
 		self.treeview.connect("drag_data_get", self.on_drag_data_get_data)
 
-		renderer = gtk.CellRendererText()
-		for col in range(len(self.labels)):
-			column = gtk.TreeViewColumn(self.labels[col], renderer, text = col)
+		self.renderer = gtk.CellRendererText()
+		for col in range(self.nr_columns):
+			column = gtk.TreeViewColumn(self.labels[col],
+						    self.renderer, text = col)
+			column.add_attribute(self.renderer, "weight",
+					     col + self.nr_columns)
 			column.set_sort_column_id(col)
 			self.treeview.append_column(column)
 
@@ -828,7 +868,7 @@ class procview:
 			      "pid:%s" % utilist.csv(pid_list, "%d"))
 
 	def set_thread_columns(self, iter, tid, thread_info):
-		new_value = [ None ] * len(self.labels)
+		new_value = [ None ] * self.nr_columns
 
 		new_value[self.COL_PRI] = int(thread_info["stat"]["rt_priority"])
 
@@ -854,8 +894,7 @@ class procview:
 
 		new_value[self.COL_CMDLINE] = procfs.process_cmdline(thread_info)
 
-		for col in range(len(self.labels)):
-			self.tree_store.set(iter, col, new_value[col])
+		set_store_columns(self.tree_store, iter, new_value)
 
 		return False
 
