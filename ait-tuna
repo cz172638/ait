@@ -50,6 +50,58 @@ def set_affinity_warning(tid, affinity):
 	dialog.run()
 	dialog.destroy()
 
+def cpustring_to_list(cpustr):
+	"""Convert a string of numbers to an integer list.
+    
+	Given a string of comma-separated numbers and number ranges,
+	return a simple sorted list of the integers it represents.
+
+	This function will throw exceptions for badly-formatted strings.
+    
+	Returns a list of integers."""
+
+	fields = cpustr.strip().split(",")
+	cpu_list = []
+	for field in fields:
+		ends = field.split("-")
+		if len(ends) > 2:
+			raise "Syntax error"
+		if len(ends) == 2:
+			cpu_list += range(int(ends[0]), int(ends[1])+1)
+		else:
+			cpu_list += [int(ends[0])]
+	return list(set(cpu_list))
+
+def list_to_cpustring(l):
+	"""Convert a list of integers into a range string.
+
+	Consecutive values will be collapsed into ranges.
+
+	This should not throw any exceptions as long as the list is all
+	positive integers.
+
+	Returns a string."""
+
+	l = list(set(l))
+	strings = []
+	inrange = False
+	prev = -2
+	while len(l):
+		i = l.pop(0)
+		if i - 1 == prev:
+			while len(l):
+				j = l.pop(0)
+				if j - 1 != i:
+					l.insert(0, j)
+					break;
+				i = j
+			t = strings.pop()
+			strings.append("%s-%u" % (t, i))
+		else:
+			strings.append("%u" % i)
+		prev = i
+	return ",".join(strings)
+
 def move_threads_to_cpu(cpu, data):
 	pid_list = [ int(pid) for pid in data.split(",") ]
 	new_affinity = [ cpu, ]
@@ -317,16 +369,19 @@ def get_irq_affinity_text(irqs, irq):
 		return ""
 
 def on_affinity_text_changed(self):
-	new_affinity_text = self.affinity.get_text()
+	new_affinity_text = self.affinity.get_text().strip()
 	if self.affinity_text != new_affinity_text:
 		try:
 			for cpu in new_affinity_text.strip(",").split(","):
 				new_affinity_cpu_entry = int(cpu, 16)
 		except:
-			if len(new_affinity_text.strip()) > 0:
-				# print "not a hex number"
-				self.affinity.set_text(self.affinity_text)
-				return
+			try:
+				new_affinity = cpustring_to_list(new_affinity_text)
+			except:
+				if len(new_affinity_text) > 0 and new_affinity_text[-1] != "-":
+					# print "not a hex number"
+					self.affinity.set_text(self.affinity_text)
+					return
 		self.affinity_text = new_affinity_text
 
 def invalid_affinity():
@@ -370,7 +425,10 @@ def thread_set_attributes(pid, threads, new_policy, new_prio, new_affinity, nr_c
 	try:
 		new_affinity = [ int(a) for a in new_affinity.split(",") ]
 	except:
-		new_affinity = utilist.bitmasklist(new_affinity, nr_cpus)
+		try:
+			new_affinity = cpustring_to_list(new_affinity)
+		except:
+			new_affinity = utilist.bitmasklist(new_affinity, nr_cpus)
 		
 	new_affinity.sort()
 
@@ -469,8 +527,11 @@ class irq_druid:
 			try:
 				new_affinity = [ int(a) for a in new_affinity.split(",") ]
 			except:
-				new_affinity = utilist.bitmasklist(new_affinity,
-								   self.irqs.nr_cpus)
+				try:
+					new_affinity = cpustring_to_list(new_affinity)
+				except:
+					new_affinity = utilist.bitmasklist(new_affinity,
+									   self.irqs.nr_cpus)
 
 			new_affinity.sort()
 
