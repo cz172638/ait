@@ -524,16 +524,17 @@ class irqview:
 			pid = -1
 			prio = -1
 
-		affinity_text = get_irq_affinity_text(self.irqs, irq)
-		events = reduce(lambda a, b: a + b, irq_info["cpu"])
+		new_value = [ None ] * len(self.labels)
+		new_value[self.COL_NUM] = irq
+		new_value[self.COL_PID] = pid
+		new_value[self.COL_POL] = sched
+		new_value[self.COL_PRI] = prio
+		new_value[self.COL_AFF] = get_irq_affinity_text(self.irqs, irq)
+		new_value[self.COL_EVENTS] = reduce(lambda a, b: a + b, irq_info["cpu"])
+		new_value[self.COL_USERS] = utilist.csv(users, '%s')
 
-		self.list_store.set(iter, self.COL_NUM, irq,
-					  self.COL_PID, pid,
-					  self.COL_POL, sched,
-					  self.COL_PRI, prio,
-					  self.COL_AFF, affinity_text,
-					  self.COL_EVENTS, events,
-					  self.COL_USERS, utilist.csv(users, '%s'))
+		for col in range(len(self.labels)):
+			self.list_store.set(iter, col, new_value[col])
 
 	def show(self, ps):
 		self.ps = ps
@@ -827,35 +828,35 @@ class procview:
 			      "pid:%s" % utilist.csv(pid_list, "%d"))
 
 	def set_thread_columns(self, iter, tid, thread_info):
-		prio = int(thread_info["stat"]["rt_priority"])
+		new_value = [ None ] * len(self.labels)
+
+		new_value[self.COL_PRI] = int(thread_info["stat"]["rt_priority"])
 
 		try:
-			sched = schedutils.schedstr(schedutils.get_scheduler(tid))[6:]
+			new_value[self.COL_POL] = schedutils.schedstr(schedutils.get_scheduler(tid))[6:]
 		except SystemError:
 			return True
 
+		new_value[self.COL_PID] = tid
+
 		thread_affinity_list = schedutils.get_affinity(tid)
 		if len(thread_affinity_list) <= 4:
-			thread_affinity = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
+			new_value[self.COL_AFF] = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
 		else:
-			thread_affinity = utilist.csv(utilist.hexbitmask(thread_affinity_list,
+			new_value[self.COL_AFF] = utilist.csv(utilist.hexbitmask(thread_affinity_list,
 									 self.nr_cpus), '0x%x')
 		try:
-			voluntary_ctxt_switches = int(thread_info["status"]["voluntary_ctxt_switches"])
-			nonvoluntary_ctxt_switches = int(thread_info["status"]["nonvoluntary_ctxt_switches"])
+			new_value[self.COL_VOLCTXT] = int(thread_info["status"]["voluntary_ctxt_switches"])
+			new_value[self.COL_NONVOLCTXT] = int(thread_info["status"]["nonvoluntary_ctxt_switches"])
 		except:
-			voluntary_ctxt_switches = -1
-			nonvoluntary_ctxt_switches = -1
+			new_value[self.COL_VOLCTXT] = -1
+			new_value[self.COL_NONVOLCTXT] = -1
 
-		cmdline = procfs.process_cmdline(thread_info)
+		new_value[self.COL_CMDLINE] = procfs.process_cmdline(thread_info)
 
-		self.tree_store.set(iter, self.COL_PID, tid,
-					  self.COL_POL, sched,
-					  self.COL_PRI, prio,
-					  self.COL_AFF, thread_affinity,
-					  self.COL_VOLCTXT, voluntary_ctxt_switches,
-					  self.COL_NONVOLCTXT, nonvoluntary_ctxt_switches,
-					  self.COL_CMDLINE, cmdline)
+		for col in range(len(self.labels)):
+			self.tree_store.set(iter, col, new_value[col])
+
 		return False
 
 	def show(self, ps):
