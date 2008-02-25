@@ -2,7 +2,7 @@
 # -*- python -*-
 # -*- coding: utf-8 -*-
 
-import ethtool, procfs, schedutils, sys, time, utilist
+import ethtool, procfs, schedutils, sys, time
 
 def show_header():
 	print "RT threads"
@@ -25,7 +25,7 @@ def show(ps, cpuinfo, irqs):
 		if len(thread_affinity_list) <= 4:
 			thread_affinity = ",".join(str(a) for a in thread_affinity_list)
 		else:
-			thread_affinity = ",".join(str(hex(a)) for a in utilist.hexbitmask(schedutils.get_affinity(pid), cpuinfo.nr_cpus))
+			thread_affinity = ",".join(str(hex(a)) for a in procfs.hexbitmask(schedutils.get_affinity(pid), cpuinfo.nr_cpus))
 		sched = schedutils.schedstr(schedutils.get_scheduler(pid))[6:]
 		rtprio = int(ps[pid]["stat"]["rt_priority"])
 		cmd = ps[pid]["stat"]["comm"]

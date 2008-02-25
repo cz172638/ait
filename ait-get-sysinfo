@@ -2,7 +2,7 @@
 # -*- python -*-
 # -*- coding: utf-8 -*-
 
-import ethtool, os, procfs, schedutils, sys, sysctl, utilist
+import ethtool, os, procfs, schedutils, sys
 
 def get_tso_state():
 	state=""
@@ -35,7 +35,9 @@ def get_nic_kthread_affinities(irqs):
 		# affinity comes from /proc/irq/N/smp_affinities, that
 		# needs root priviledges
 		try:
-			state += "%s=%s;" % (iface, utilist.csv(utilist.hexbitmask(irqs[irq]["affinity"], irqs.nr_cpus), '%x'))
+			state += "%s=%s;" % (iface,
+					     ",".join(str(a) for a in procfs.hexbitmask(irqs[irq]["affinity"],
+					     						irqs.nr_cpus)))
 		except:
 			pass
 	state = state.strip(";")
@@ -67,7 +69,7 @@ if __name__ == '__main__':
 	irqs = procfs.interrupts()
 	cpuinfo = procfs.cpuinfo()
 	uname = os.uname()
-	sysctl = sysctl.sysctl()
+	sysctl = procfs.sysctl()
 
 	# arch, vendor, cpu_model, nr_cpus
 	sysinfo["nodename"] = uname[1]
@@ -138,8 +140,8 @@ if __name__ == '__main__':
 		app = pfs.find_by_name(app_process_name)
 		if app:
 			sysinfo["app_rtprio"] = pfs.get_rtprios(app_process_name)
-			sysinfo["app_affinity"] = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(app[0]),
-													    int(sysinfo["nr_cpus"])), "%x")
+			sysinfo["app_affinity"] = ",".join("%x" % a for a in procfs.hexbitmask(schedutils.get_affinity(app[0]),
+											       int(sysinfo["nr_cpus"])))
 			sysinfo["app_sched"] = schedutils.schedstr(schedutils.get_scheduler(app[0]))
 
 			# Default: libc statically linked

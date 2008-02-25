@@ -5,7 +5,7 @@
 import pygtk
 pygtk.require("2.0")
 
-import ethtool, gtk, gobject, os, pango, procfs, re, schedutils, sys, utilist
+import ethtool, gtk, gobject, os, pango, procfs, re, schedutils, sys
 import gtk.glade
 
 # FIXME: should go to python-schedutils
@@ -187,8 +187,8 @@ def isolate_cpu(cpu, nr_cpus):
 			affinity = affinity_remove_cpu(affinity,
 						       cpu, nr_cpus)
 			if set_irq_affinity(int(irq),
-					    utilist.hexbitmask(affinity,
-							       nr_cpus)):
+					    procfs.hexbitmask(affinity,
+							      nr_cpus)):
 				irqs_changed = True
 
 	return (ps_changed, irqs_changed)
@@ -424,7 +424,7 @@ def thread_set_attributes(pid, threads, new_policy, new_prio, new_affinity, nr_c
 		try:
 			new_affinity = cpustring_to_list(new_affinity)
 		except:
-			new_affinity = utilist.bitmasklist(new_affinity, nr_cpus)
+			new_affinity = procfs.bitmasklist(new_affinity, nr_cpus)
 		
 	new_affinity.sort()
 
@@ -526,15 +526,15 @@ class irq_druid:
 				try:
 					new_affinity = cpustring_to_list(new_affinity)
 				except:
-					new_affinity = utilist.bitmasklist(new_affinity,
-									   self.irqs.nr_cpus)
+					new_affinity = procfs.bitmasklist(new_affinity,
+									  self.irqs.nr_cpus)
 
 			new_affinity.sort()
 
 			curr_affinity = self.irqs[self.irq]["affinity"]
 			if curr_affinity != new_affinity:
-				set_irq_affinity(self.irq, utilist.hexbitmask(new_affinity,
-									      self.irqs.nr_cpus))
+				set_irq_affinity(self.irq, procfs.hexbitmask(new_affinity,
+									     self.irqs.nr_cpus))
 				changed = True
 
 		self.dialog.destroy()

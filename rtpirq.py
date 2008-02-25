@@ -2,7 +2,7 @@
 # -*- python -*-
 # -*- coding: utf-8 -*-
 
-import ethtool, procfs, schedutils, sys, time, utilist
+import ethtool, schedutils, sys, time, procfs
 
 def softirq_info(rxtx):
 	print "\nSoft IRQ net %s info" % rxtx
@@ -39,7 +39,7 @@ def show(irqs, ps):
 			if len(thread_affinity_list) <= 4:
 				thread_affinity = ",".join("%s" % a for a in thread_affinity_list)
 			else:
-				thread_affinity = ",".join("0x%x" % a for a in utilist.hexbitmask(schedutils.get_affinity(pid), irqs.nr_cpus))
+				thread_affinity = ",".join("0x%x" % a for a in procfs.hexbitmask(schedutils.get_affinity(pid), irqs.nr_cpus))
 			rtprio = int(ps[pid]["stat"]["rt_priority"])
 		else:
 			pid = -1
@@ -51,7 +51,7 @@ def show(irqs, ps):
 			if len(irq_affinity_list) <= 4:
 				irq_affinity = ",".join("%s" % a for a in irq_affinity_list)
 			else:
-				irq_affinity = ",".join("0x%x" % a for a in utilist.hexbitmask(irq_affinity_list, irqs.nr_cpus))
+				irq_affinity = ",".join("0x%x" % a for a in procfs.hexbitmask(irq_affinity_list, irqs.nr_cpus))
 		except:
 			irq_affinity = ""
 		events = reduce(lambda a, b: a + b, info["cpu"])
