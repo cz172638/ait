@@ -359,11 +359,7 @@ def get_irq_users(irqs, irq, nics = None):
 def get_irq_affinity_text(irqs, irq):
 	affinity_list = irqs[irq]["affinity"]
 	try:
-		if len(affinity_list) <= 4:
-			return ("%s" % affinity_list)[1:-1].replace(" ", "")
-		else:
-			return utilist.csv(utilist.hexbitmask(affinity_list,
-							      irqs.nr_cpus), '0x%x')
+		return list_to_cpustring(affinity_list)
 	except:
 		# needs root prio to read /proc/irq/<NUM>/smp_affinity
 		return ""
@@ -736,12 +732,7 @@ class process_druid:
 
 		self.sched_pri.set_value(int(pid_info["stat"]["rt_priority"]))
 		cmdline_regex = procfs.process_cmdline(pid_info)
-		affinity_list = schedutils.get_affinity(pid)
-		if len(affinity_list) <= 4:
-			self.affinity_text = ("%s" % affinity_list)[1:-1].replace(" ", "")
-		else:
-			self.affinity_text = utilist.csv(utilist.hexbitmask(affinity_list,
-									    self.nr_cpus), '0x%x')
+		self.affinity_text = list_to_cpustring(schedutils.get_affinity(pid))
 		self.affinity.set_text(self.affinity_text)
 		self.create_matching_process_model(processes)
 		self.create_policy_model(self.sched_policy)
@@ -939,13 +930,8 @@ class procview:
 			return True
 
 		new_value[self.COL_PID] = tid
-
 		thread_affinity_list = schedutils.get_affinity(tid)
-		if len(thread_affinity_list) <= 4:
-			new_value[self.COL_AFF] = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
-		else:
-			new_value[self.COL_AFF] = utilist.csv(utilist.hexbitmask(thread_affinity_list,
-									 self.nr_cpus), '0x%x')
+		new_value[self.COL_AFF] = list_to_cpustring(thread_affinity_list)
 		try:
 			new_value[self.COL_VOLCTXT] = int(thread_info["status"]["voluntary_ctxt_switches"])
 			new_value[self.COL_NONVOLCTXT] = int(thread_info["status"]["nonvoluntary_ctxt_switches"])
