@@ -23,9 +23,9 @@ def show(ps, cpuinfo, irqs):
 	for pid in ps_list:
 		thread_affinity_list = schedutils.get_affinity(pid)
 		if len(thread_affinity_list) <= 4:
-			thread_affinity = ("%s" % thread_affinity_list)[1:-1].replace(" ", "")
+			thread_affinity = ",".join(str(a) for a in thread_affinity_list)
 		else:
-			thread_affinity = utilist.csv(utilist.hexbitmask(schedutils.get_affinity(pid), cpuinfo.nr_cpus), '0x%x')
+			thread_affinity = ",".join(str(hex(a)) for a in utilist.hexbitmask(schedutils.get_affinity(pid), cpuinfo.nr_cpus))
 		sched = schedutils.schedstr(schedutils.get_scheduler(pid))[6:]
 		rtprio = int(ps[pid]["stat"]["rt_priority"])
 		cmd = ps[pid]["stat"]["comm"]
@@ -36,7 +36,7 @@ def show(ps, cpuinfo, irqs):
 				for u in users:
 					if u in nics:
 						users[users.index(u)] = "%s(%s)" % (u, ethtool.get_module(u))
-				users = utilist.csv(users, "%s")
+				users = ",".join(users)
 			except:
 				users = "Not found in /proc/interrupts!"
 		try:

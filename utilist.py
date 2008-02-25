@@ -36,11 +36,3 @@ def bitmasklist(line, nr_entries):
 		if entry == nr_entries:
 			break
 	return bitmasklist
-
-def csv(l, type):
-	csv = ""
-	mask = "%s," % type
-	for i in l:
-		csv += mask % i
-	return csv.strip(",")
-
