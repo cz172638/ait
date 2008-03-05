@@ -247,6 +247,9 @@ def create_html(db, ref, others, field_exclude_list):
 	
 	columns = [column[0] for column in db.cursor.description]
 	common_columns = get_common_columns([ ref, ] + others, columns)
+	lock_stat_index = columns.index("lock_stat")
+	if lock_stat_index in common_columns:
+		common_columns.remove(lock_stat_index)
 
 	f.write('<h1>Specific Tunings:</h0>\n<table border=1 style="background-color: #8aa;400px; border: thin solid black; font-family: sans-serif; font-size: 10px;">\n<tr>')
 	f.write("<th>date</th><th>report</th><th>max<br>packet<br>rate</th>")
