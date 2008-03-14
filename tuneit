@@ -1,0 +1,148 @@
+#! /usr/bin/python
+# -*- python -*-
+# -*- coding: utf-8 -*-
+
+import ethtool, getopt, schedutils, sys, time, procfs
+from dbstats import dbstats
+from procfs import sysctl
+
+def replay_sysctl(knob, value, parms):
+	s = sysctl()
+	s["%s/%s" % (parms[0], knob)] = value
+	del s
+
+def replay_nic_affinity(knob, value, parms):
+	entries=value.split(";")
+	print entries
+
+knob_replayers = {
+	"tcp_congestion_control": [ replay_sysctl, "net/ipv4" ],
+	"vsyscall64":		  [ replay_sysctl, "kernel" ],
+	"nic_kthread_affinities": [ replay_nic_affinity ],
+}
+
+def dbquery(db, id):
+	tunings = db.get_system_tunings_by_id(id)
+	if not tunings:
+		return None
+	dict = {}
+	columns = [column[0] for column in db.cursor.description]
+	for i in range(len(columns)):
+		dict[columns[i]] = tunings[i]
+	return dict
+
+def replay(knobs):
+	for knob in knobs.keys():
+		value = knobs[knob]
+		if value:
+			if knob_replayers.has_key(knob):
+				replayer = knob_replayers[knob]
+				replayer[0](knob, value, replayer[1:])
+			else:
+				print "no replayer for %s=%s" % (knob, value)
+
+def show(knobs):
+	for knob in knobs.keys():
+		if knobs[knob]:
+			print "%s: %s" % (knob, knobs[knob])
+
+def query(db, q):
+	try:
+		ids = db.get_system_tunings_ids_for_query(q)
+	except:
+		print "Invalid query"
+		return
+	print ",".join([str(id) for id in ids])
+
+def dicts_common_key_values(dicts):
+	common_keys = []
+	for key in dicts[0].keys():
+		values = [ dict[key] for dict in dicts ]
+		if len(list(set(values))) == 1:
+			common_keys.append(key)
+	return common_keys
+
+def get_tunings_for_id_list(db, ids):
+	tunings = []
+	for id in ids:
+		t = dbquery(db, int(id))
+		t['tuning_id'] = id
+		tunings.append(t)
+	return tunings
+
+def common(db, ids):
+	tunings = get_tunings_for_id_list(db, ids)
+	common_keys = dicts_common_key_values(tunings)
+	for key in common_keys:
+		print "%s: %s" % (key, tunings[0][key])
+
+def diff(db, ids):
+	tunings = get_tunings_for_id_list(db, ids)
+	common_keys = dicts_common_key_values(tunings)
+	common_keys.append('tuning_id')
+	for tuning in tunings:
+		print "Tunings#: %s" % tuning['tuning_id']
+		for key in tunings[0].keys():
+			if key not in common_keys:
+				print "  %s: %s" % (key, tuning[key])
+
+def usage():
+	print "tuneit: [--help|h] [--query|q QUERY] [--replay|r TUNING_ID] [--show|s TUNING_ID]"
+
+def main(args):
+	try:
+		opts, args = getopt.getopt(args, "d:D:c:hq:r:s:",
+					   [ "db", "diff=", "common=", "help",
+					     "query=", "replay=",
+					     "show="], )
+	except getopt.GetoptError, err:
+		usage()
+		print str(err)
+		sys.exit(2)
+
+	if not opts:
+		usage()
+		sys.exit()
+
+	dbname = "tuna"
+	tuning_id = -1
+	query_str = None
+	common_str = None
+	diff_str = None
+	for o, a in opts:
+		if o in ( "-h", "--help" ):
+			usage()
+			sys.exit()
+		elif o in ( "-q", "--query" ):
+			query_str = a
+		elif o in ( "-c", "--common" ):
+			common_str = a
+		elif o in ( "-D", "--diff" ):
+			diff_str = a
+		elif o in ( "-r", "--replay", "-s", "--show" ):
+			tuning_id = int(a)
+			if o in ("-r", "--replay"):
+				dboperation = replay
+			else:
+				dboperation = show
+		elif o in ( "-d", "--db" ):
+			dbname = a
+		else:
+			assert False, "unhandled option"
+
+	db = dbstats(dbname)
+	if tuning_id != -1:
+		knobs = dbquery(db, tuning_id)
+		if not knobs:
+			print "%d not found" % tuning_id
+			sys.exit(2)
+		dboperation(knobs)
+	elif query_str:
+		query(db, query_str)
+	elif common_str:
+		common(db, common_str.split(","))
+	elif diff_str:
+		diff(db, diff_str.split(","))
+
+if __name__ == '__main__':
+	main(sys.argv[1:])
