@@ -331,6 +331,25 @@ class dbstats:
 				  ''' % report)
 		return self.cursor.fetchone()
 
+	def get_system_tunings_by_id(self, id):
+		self.cursor.execute('''
+					select *
+					  from system_tunings
+					  where rowid = %d
+				  ''' % id)
+		return self.cursor.fetchone()
+
+	def get_system_tunings_ids_for_query(self, query):
+		try:
+			self.cursor.execute('''
+						select rowid
+						  from system_tunings
+						  where %s
+					  ''' % query)
+			return [ id[0] for id in self.cursor.fetchall() ]
+		except: 
+			raise SyntaxError
+
 	def machine_hardware_id(self, system):
 		machine_hardware = (system["arch"],
 				    system["vendor_id"],
@@ -352,8 +371,22 @@ class dbstats:
 
 		return machine_id
 
-	def setreport(self, report, client_machine, server_machine):
+	def get_system_tunings_id(self, machine):
+		system_tunings = {}
 
+		# First get the tunings collected by ait-get-sysinfo.py
+		for tuning in [ a[0] for a in self.system_tunings_columns ]:
+			if machine.has_key(tuning):
+				system_tunings[tuning] = machine[tuning]
+
+		id = self.get_dict_table_id("system_tunings", system_tunings)
+		if not id:
+			self.create_dict_table_id("system_tunings", system_tunings)
+			id = self.get_dict_table_id("system_tunings", system_tunings)
+
+		return id
+
+	def setreport(self, report, client_machine, server_machine):
 		# Load the client and server hardware info from the data
 		# collected by ait-get-sysinfo.py
 		client_system = get_sysinfo_dict(client_machine)
@@ -368,17 +401,7 @@ class dbstats:
 		server_machine_id = self.machine_id(server_system, server_machine_hardware_id)
 
 		# Find the server system tunings id in the DB
-		server_system_tunings = {}
-
-		# First get the tunings collected by ait-get-sysinfo.py
-		for tuning in [ a[0] for a in self.system_tunings_columns ]:
-			if server_system.has_key(tuning):
-				server_system_tunings[tuning] = server_system[tuning]
-
-		system_tunings_id = self.get_dict_table_id("system_tunings", server_system_tunings)
-		if not system_tunings_id:
-			self.create_dict_table_id("system_tunings", server_system_tunings)
-			system_tunings_id = self.get_dict_table_id("system_tunings", server_system_tunings)
+		system_tunings_id = self.get_system_tunings_id(server_system)
 
 		# Collect the versions of relevant system components (kernel,
 		# libc, etc):
