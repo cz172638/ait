@@ -20,7 +20,7 @@ The cit report format is a CSV file with this information in each line:
 
   packet_rate,min_lat,avg_lat,max_lat,lat_dev,pkt_count
 
-Then the cit tool runs and processes the cit report file, taking a photo
+Then the cit tool runs and processes the cit report file, taking a snapshot
 of the tuning environment, that as of this time consists of:
 
  ( tso, ufo, softirq_net_tx_prio, softirq_net_rx_prio, server_rtprio,
@@ -38,8 +38,8 @@ Example:
    "eth1=95;eth5=95;eth4=95;eth2=95;eth3=95",
    0, , 0, None, 1, 0, poll, False )
 
-This is stored in a database table that, so that several test runs can
-be made on the same tuning environment and later combined/compared.
+This is stored in database tables, so that several test runs can be made on the
+same tuning environment and later combined/compared.
 
 The cit file packet rate and latency data is stored in another table, together
 with an indication to the report it came from and tuning environment where
