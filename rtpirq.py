@@ -2,11 +2,13 @@
 # -*- python -*-
 # -*- coding: utf-8 -*-
 
-import ethtool, schedutils, sys, time, procfs
+import ethtool, schedutils, sys, time, procfs, re
 
 def softirq_info(rxtx):
 	print "\nSoft IRQ net %s info" % rxtx
-	pids = ps.find_by_name("softirq-net-%s/" % rxtx)
+	pids = ps.find_by_regex(re.compile("sirq-net-%s/.*" % rxtx))
+	if not pids:
+		pids = ps.find_by_regex(re.compile("softirq-net-%s/.*" % rxtx))
 	print "%5s %5s %7s" % ("pid", "rtpri", "affinity")
 	for pid in pids:
 		affinity = ",".join("%s" % a for a in schedutils.get_affinity(pid))
