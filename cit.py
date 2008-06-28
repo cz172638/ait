@@ -37,8 +37,8 @@ if __name__ == '__main__':
 
 	print "Adding report %s to the database" % db.report
 
-	r = latencies_per_rate_report("%s.cit" % report)
-	metrics = [ "min", "avg", "max", "dev" ]
+	r = latencies_per_rate_report(report)
+	metrics = [ "min", "max", "avg" ]
 	for metric in range(len(metrics)):
 		metric_rates = {}
 		for rate in r.rates.keys():
