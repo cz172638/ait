@@ -1,0 +1,7 @@
+#!/bin/bash
+
+SERVER_MACHINE=$1
+cd /home/acme/git/qpid-mirror/cpp/src/tests/
+for rate in $(seq 1000 3000 125000) ; do
+	./latencytest -b $SERVER_MACHINE --csv --rate $rate --tcp-nodelay --time-limit 5
+done | tee /tmp/latencytest.output

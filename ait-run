@@ -1,0 +1,53 @@
+#!/bin/bash
+# Run the test, collect results, add to the database
+# Later use ait-plot
+# Arnaldo Carvalho de Melo <acme@redhat.com>
+
+PYTHONPATH=/home/acme/git/ait
+export PYTHONPATH
+
+TESTNAME=latrate
+SERVER_MACHINE=$(hostname)
+CLIENT_MACHINE=emilia.ghostprotocols.net
+AIT_DIR=/home/acme/git/ait
+CLIENT_APP=$AIT_DIR/ait-client-$TESTNAME
+DBNAME=qpid
+SERVER_PROCESS_NAME=qpidd
+CLIENT_PROCESS_NAME=latencytest
+REPORT_DIR=/tmp
+REPORT_FILE=latencytest.output
+LOCK_STAT_DIR=lock_stat
+
+# killall leftover clients
+ssh $CLIENT_MACHINE killall $CLIENT_PROCESS_NAME
+
+# If /proc/lock_stat exists, reset it
+if [ -f /proc/lock_stat ] ; then
+	rm -f $LOCK_STAT_DIR/last
+	echo 0 > /proc/lock_stat
+fi
+
+# remove old client report
+ssh $CLIENT_MACHINE rm $REPORT_DIR/$REPORT_FILE
+
+# Run the client
+ssh $CLIENT_MACHINE $CLIENT_APP $SERVER_MACHINE
+
+# If /proc/lock_stat exists, take a snapshot
+if [ -f /proc/lock_stat ] ; then
+	cat /proc/lock_stat > $LOCK_STAT_DIR/last
+fi
+
+rm -f $REPORT_FILE
+
+# Get the client report
+scp $CLIENT_MACHINE:$REPORT_DIR/$REPORT_FILE .
+
+# Get server information
+./ait-get-sysinfo $SERVER_PROCESS_NAME > ${SERVER_MACHINE}.sysinfo
+
+# Get client information
+ssh $CLIENT_MACHINE $AIT_DIR/ait-get-sysinfo $CLIENT_PROCESS_NAME > ${CLIENT_MACHINE}.sysinfo
+
+# Collect it!
+./ait-db-add-$TESTNAME $DBNAME $CLIENT_MACHINE $SERVER_MACHINE $REPORT_FILE
