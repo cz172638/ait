@@ -81,8 +81,14 @@ if __name__ == '__main__':
 		
 	sysinfo["tso"] = get_tso_state()
 	sysinfo["ufo"] = get_ufo_state()
-	sysinfo["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-tx")
-	sysinfo["softirq_net_rx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-rx")
+
+	sysinfo["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("sirq-net-tx")
+	if not sysinfo["softirq_net_tx_prio"]:
+		sysinfo["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-tx")
+
+	sysinfo["softirq_net_rx_prio"] = pfs.get_per_cpu_rtprios("sirq-net-rx")
+	if not sysinfo["softirq_net_rx_prio"]:
+		sysinfo["softirq_net_rx_prio"] = pfs.get_per_cpu_rtprios("softirq-net-rx")
 
 	sysinfo["irqbalance"] = False
 	if pfs.find_by_name("irqbalance"):
