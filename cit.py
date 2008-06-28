@@ -48,3 +48,5 @@ if __name__ == '__main__':
 	if os.access("/proc/lock_stat", os.F_OK) and \
 	   os.access("lock_stat/last", os.F_OK):
 	   	os.rename("lock_stat/last", "lock_stat/%d.txt" % db.report)
+
+	os.rename(report, "reports/%s/%d" % (appname, db.report))
