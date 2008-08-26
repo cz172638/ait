@@ -11,12 +11,10 @@ SERVER_MACHINE=$(hostname)
 CLIENT_MACHINE=emilia.ghostprotocols.net
 AIT_DIR=/home/acme/git/ait
 CLIENT_APP=$AIT_DIR/ait-client-$TESTNAME
-DBNAME=qpid
-SERVER_PROCESS_NAME=qpidd
-CLIENT_PROCESS_NAME=latencytest
-REPORT_DIR=/tmp
-REPORT_FILE=latencytest.output
 LOCK_STAT_DIR=lock_stat
+CONFIG_FILE=$1
+
+. $CONFIG_FILE
 
 # killall leftover clients
 ssh $CLIENT_MACHINE killall $CLIENT_PROCESS_NAME
