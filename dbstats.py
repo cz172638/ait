@@ -73,7 +73,9 @@ class dbstats:
 				   ( "tcp_sack", "text" ),
 				   ( "tcp_dsack", "text" ),
 				   ( "tcp_window_scaling", "text" ),
-				   ( "kcmd_nohz", "text" ) ]
+				   ( "kcmd_nohz", "text" ),
+				   ( "coalesce_rx_frames", "text" ),
+				   ( "coalesce_tx_frames", "text" ) ]
 
 	def create_tables(self):
 		query = dbutil_create_text_table_query("system_tunings", self.system_tunings_columns)

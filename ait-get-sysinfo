@@ -14,6 +14,20 @@ def get_tso_state():
 	state = state.strip(",")
 	return state
 
+def get_coalesce_interface(interface, metric):
+	try:
+                coal = ethtool.get_coalesce(interface)
+        except IOError:
+                return "NA"
+
+	return coal[metric]
+
+def get_coalesce(metric):
+	return ",".join("%s=%s" % \
+			(iface,
+			 get_coalesce_interface(iface, metric)) \
+			for iface in ethtool.get_devices())
+
 def get_ufo_state():
 	state=""
 	# UFO may not be present on this kernel and then we get an exception
@@ -80,6 +94,8 @@ if __name__ == '__main__':
 	sysinfo["nr_cpus"] = cpuinfo.nr_cpus
 		
 	sysinfo["tso"] = get_tso_state()
+	sysinfo["coalesce_rx_frames"] = get_coalesce("rx_max_coalesced_frames")
+	sysinfo["coalesce_tx_frames"] = get_coalesce("tx_max_coalesced_frames")
 	sysinfo["ufo"] = get_ufo_state()
 
 	sysinfo["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("sirq-net-tx")
