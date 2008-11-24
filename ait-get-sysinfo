@@ -2,7 +2,20 @@
 # -*- python -*-
 # -*- coding: utf-8 -*-
 
-import ethtool, os, procfs, schedutils, sys
+import ethtool, os, procfs, re, schedutils, sys
+
+def glibc_uses_priv_futex():
+	(child_stdin,
+	 child_stdout,
+	 child_stderr) = os.popen3("strace -e trace=futex ls /")
+	line = child_stderr.readline()
+	if line:
+		if re.match("^futex\(.+FUTEX_.+_PRIVATE,.+\)", line):
+			return True
+
+		if re.match("/bin/sh: strace: command not found", line):
+			raise SystemError, "strace failed, is it installed?"
+	return False
 
 def get_tso_state():
 	state=""
@@ -97,6 +110,7 @@ if __name__ == '__main__':
 	sysinfo["coalesce_rx_frames"] = get_coalesce("rx_max_coalesced_frames")
 	sysinfo["coalesce_tx_frames"] = get_coalesce("tx_max_coalesced_frames")
 	sysinfo["ufo"] = get_ufo_state()
+	sysinfo["glibc_priv_futex"] = glibc_uses_priv_futex()
 
 	sysinfo["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("sirq-net-tx")
 	if not sysinfo["softirq_net_tx_prio"]:
