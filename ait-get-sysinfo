@@ -83,6 +83,15 @@ def get_nic_kthread_rtprios(irqs, ps):
 	state = state.strip(";")
 	return state
 
+def get_clocksource():
+	try:
+		f = file("/sys/devices/system/clocksource/clocksource0/current_clocksource")
+		clocksource = f.readline().strip()
+		f.close()
+		return clocksource
+	except:
+		return "unknown"
+
 if __name__ == '__main__':
 
 	if len(sys.argv) > 1:
@@ -162,6 +171,14 @@ if __name__ == '__main__':
 	except:
 		pass
 
+	sysinfo["sched_min_granularity_ns"] = None
+	try:
+		f = file("/proc/sys/kernel/sched_min_granularity_ns")
+		sysinfo["sched_min_granularity_ns"] = int(f.readline())
+		f.close()
+	except:
+		pass
+
 	sysinfo["kcmd_idle"] = None
 	if kcmd.options.has_key("idle"):
 		sysinfo["kcmd_idle"] = kcmd.options["idle"]
@@ -171,6 +188,7 @@ if __name__ == '__main__':
 		sysinfo["kcmd_nohz"] = kcmd.options["nohz"]
 
 	sysinfo["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
+	sysinfo["clocksource"] = get_clocksource()
 
 	if app_process_name:
 		app = pfs.find_by_name(app_process_name)

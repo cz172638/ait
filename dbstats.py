@@ -76,7 +76,9 @@ class dbstats:
 				   ( "kcmd_nohz", "text" ),
 				   ( "coalesce_rx_frames", "text" ),
 				   ( "coalesce_tx_frames", "text" ),
-				   ( "glibc_priv_futex", "text" ) ]
+				   ( "clocksource", "text" ),
+				   ( "glibc_priv_futex", "text" ),
+				   ( "sched_min_granularity_ns", "text" ) ]
 
 	def create_tables(self):
 		query = dbutil_create_text_table_query("system_tunings", self.system_tunings_columns)
