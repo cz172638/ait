@@ -92,6 +92,15 @@ def get_clocksource():
 	except:
 		return "unknown"
 
+def get_loadavg():
+	try:
+		f = file("/proc/loadavg")
+		loadavg = f.readline().strip()
+		f.close()
+		return loadavg
+	except:
+		return "unknown"
+
 if __name__ == '__main__':
 
 	if len(sys.argv) > 1:
@@ -189,6 +198,7 @@ if __name__ == '__main__':
 
 	sysinfo["lock_stat"] = os.access("/proc/lock_stat", os.F_OK)
 	sysinfo["clocksource"] = get_clocksource()
+	sysinfo["loadavg"] = get_loadavg()
 
 	if app_process_name:
 		app = pfs.find_by_name(app_process_name)

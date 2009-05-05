@@ -78,7 +78,8 @@ class dbstats:
 				   ( "coalesce_tx_frames", "text" ),
 				   ( "clocksource", "text" ),
 				   ( "glibc_priv_futex", "text" ),
-				   ( "sched_min_granularity_ns", "text" ) ]
+				   ( "sched_min_granularity_ns", "text" ),
+				   ( "loadavg", "text" ) ]
 
 	def create_tables(self):
 		query = dbutil_create_text_table_query("system_tunings", self.system_tunings_columns)
