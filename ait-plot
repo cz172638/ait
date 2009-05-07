@@ -222,7 +222,7 @@ def get_common_columns(results, columns):
 
 	return common_columns
 
-metrics = [ "avg", "dev", "min", "max" ]
+metrics = [ "avg", "min", "max" ]
 
 def create_html(db, ref, others, field_exclude_list):
 	list_others = ",".join([ str(o["report"]) for o in others ])
