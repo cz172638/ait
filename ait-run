@@ -3,13 +3,10 @@
 # Later use ait-plot
 # Arnaldo Carvalho de Melo <acme@redhat.com>
 
-PYTHONPATH=/home/acme/git/ait
-export PYTHONPATH
+. ait.config
 
 TESTNAME=latrate
 SERVER_MACHINE=$(hostname)
-CLIENT_MACHINE=emilia.ghostprotocols.net
-AIT_DIR=/home/acme/git/ait
 CLIENT_APP=$AIT_DIR/ait-client-$TESTNAME
 LOCK_STAT_DIR=lock_stat
 CONFIG_FILE=$1
