@@ -1,6 +1,24 @@
 #!/bin/bash
 
-SERVER_MACHINE=$1
+CONFIG=$1
+SERVER_MACHINE=$2
+. $CONFIG
+
+if [ $# -ge 3 -a "$3" == "--profiles_per_rate" ] ; then
+	COLLECT_PROFILES=1
+	PROFILES_PER_RATE_DIR=$AIT_DIR/profiles_per_rate/
+	CURRENT_PROFILES_DIR=$PROFILES_PER_RATE_DIR/current
+	# Prepare the directory, in the server, where we will
+	# store the profiles for each rate run, later, when we
+        # have the report number, we will rename "current" to the
+	# report number.
+	ssh $SERVER_MACHINE rm -rf $CURRENT_PROFILES_DIR
+	ssh $SERVER_MACHINE mkdir -p $CURRENT_PROFILES_DIR
+fi
+
+[ -n "$COLLECT_PROFILES" ] && ssh $SERVER_MACHINE "echo nosleep-time > /sys/kernel/debug/tracing/trace_options; echo graph-time > /sys/kernel/debug/tracing/trace_options"
 for rate in $(seq 1000 3000 125000) ; do
+	[ -n "$COLLECT_PROFILES" ] && ssh $SERVER_MACHINE "echo 1 > /sys/kernel/debug/tracing/function_profile_enabled"
 	latencytest -b $SERVER_MACHINE --csv --rate $rate --tcp-nodelay --time-limit 5
+	[ -n "$COLLECT_PROFILES" ] && ssh $SERVER_MACHINE "echo 0 > /sys/kernel/debug/tracing/function_profile_enabled; cat /sys/kernel/debug/tracing/trace_stat/function* > $CURRENT_PROFILES_DIR/$rate"
 done | tee /tmp/latencytest.output
