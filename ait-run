@@ -3,18 +3,21 @@
 # Later use ait-plot
 # Arnaldo Carvalho de Melo <acme@redhat.com>
 
-. ait.config
-
 TESTNAME=latrate
+. ait.config
+CONFIG_FILE=$1
+. $CONFIG_FILE
 SERVER_MACHINE=$(hostname)
 CLIENT_APP=$AIT_DIR/ait-client-$TESTNAME
 LOCK_STAT_DIR=lock_stat
-CONFIG_FILE=$1
-
-. $CONFIG_FILE
 
 # killall leftover clients
 ssh $CLIENT_MACHINE killall $CLIENT_PROCESS_NAME
+
+if [ -n "$LOG_FILE" ] ; then
+	# Remove logfile from previous runs
+	ssh $CLIENT_MACHINE rm $REPORT_DIR/$LOG_FILE
+fi
 
 # If /proc/lock_stat exists, reset it
 if [ -f /proc/lock_stat ] ; then
@@ -26,7 +29,7 @@ fi
 ssh $CLIENT_MACHINE rm $REPORT_DIR/$REPORT_FILE
 
 # Run the client
-ssh $CLIENT_MACHINE $CLIENT_APP $SERVER_MACHINE
+ssh $CLIENT_MACHINE $CLIENT_APP $SERVER_MACHINE $RATE_RANGE
 
 # If /proc/lock_stat exists, take a snapshot
 if [ -f /proc/lock_stat ] ; then
@@ -37,6 +40,12 @@ rm -f $REPORT_FILE
 
 # Get the client report
 scp $CLIENT_MACHINE:$REPORT_DIR/$REPORT_FILE .
+
+if [ -n "$LOG_FILE" ] ; then
+	rm -f $LOG_FILE
+	# Get the client log file, to extract the client config
+	scp $CLIENT_MACHINE:$REPORT_DIR/$LOG_FILE .
+fi
 
 # Get server information
 ./ait-get-sysinfo $SERVER_PROCESS_NAME > ${SERVER_MACHINE}.sysinfo
