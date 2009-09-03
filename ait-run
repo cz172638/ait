@@ -4,10 +4,10 @@
 # Arnaldo Carvalho de Melo <acme@redhat.com>
 
 TESTNAME=latrate
+SERVER_MACHINE=$(hostname)
 . ait.config
 CONFIG_FILE=$1
 . $CONFIG_FILE
-SERVER_MACHINE=$(hostname)
 CLIENT_APP=$AIT_DIR/ait-client-$TESTNAME
 LOCK_STAT_DIR=lock_stat
 
