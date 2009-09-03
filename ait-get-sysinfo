@@ -76,7 +76,7 @@ def get_nic_kthread_rtprios(irqs, ps):
 		irq = irqs.find_by_user(iface)
 		if not irq:
 			continue
-		pids = ps.find_by_name("IRQ-%s" % irq)
+		pids = ps.find_by_regex(re.compile("(irq/%s-%s|IRQ-%s)" % (irq, iface, irq)))
 		if not pids:
 			continue
 		state += "%s=%s;" % (iface, ps[pids[0]]["stat"]["rt_priority"])
