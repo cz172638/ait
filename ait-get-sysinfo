@@ -2,13 +2,11 @@
 # -*- python -*-
 # -*- coding: utf-8 -*-
 
-import ethtool, os, procfs, re, schedutils, sys
+import ethtool, os, procfs, re, schedutils, sys, subprocess as sp
 
 def glibc_uses_priv_futex():
-	(child_stdin,
-	 child_stdout,
-	 child_stderr) = os.popen3("strace -e trace=futex ls /")
-	line = child_stderr.readline()
+	p = sp.Popen("strace -e trace=futex ls /", shell=True, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE, close_fds=True)
+	line = p.stderr.readline()
 	if line:
 		if re.match("^futex\(.+FUTEX_.+_PRIVATE,.+\)", line):
 			return True
