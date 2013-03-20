@@ -1,8 +1,6 @@
 #!/bin/bash
 
-CONFIG=$1
-SERVER_MACHINE=$2
-. $CONFIG
+SERVER_MACHINE=$1
 
 if [ $# -ge 3 -a "$3" == "--profiles_per_rate" ] ; then
 	COLLECT_PROFILES=1
