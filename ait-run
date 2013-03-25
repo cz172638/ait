@@ -3,11 +3,28 @@
 # Later use ait-plot
 # Arnaldo Carvalho de Melo <acme@redhat.com>
 
-TESTNAME=latrate
 SERVER_MACHINE=$(hostname)
 . ait.config
+
+if [ $# -ne 1 ] ; then
+	echo "usage: ait-run config-file"
+	exit 1
+fi
+
 CONFIG_FILE=$1
+
+if [ ! -f $CONFIG_FILE ] ; then
+	echo "$CONFIG_FILE not found!"
+	exit 1
+fi
+
 . $CONFIG_FILE
+
+if [ -z "$TESTNAME" ] ; then
+	echo "TESTNAME variable not set and not present in $CONFIG_FILE"
+	exit 1
+fi
+
 CLIENT_APP=$AIT_DIR/ait-client-$TESTNAME
 LOCK_STAT_DIR=lock_stat
 
@@ -50,3 +67,5 @@ ssh $CLIENT_MACHINE $AIT_DIR/ait-get-sysinfo $CLIENT_PROCESS_NAME > ${CLIENT_MAC
 
 # Collect it!
 ./ait-db-add-$TESTNAME $DBNAME $CLIENT_MACHINE $SERVER_MACHINE $REPORT_DIR/$REPORT_FILE
+
+exit 0
