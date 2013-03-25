@@ -1,0 +1,30 @@
+#! /usr/bin/python
+# -*- python -*-
+# -*- coding: utf-8 -*-
+
+import sys, subprocess as sp
+
+def netperf_udp_stream(server, msgsize=4096, duration=15):
+	cmd = "netperf -H %s -t UDP_STREAM -l %d -- -m %d" % (server, duration, msgsize)
+	p = sp.Popen(cmd, shell=True, stdin=sp.PIPE, stdout=sp.PIPE,
+		     stderr=sp.PIPE, close_fds=True)
+        lines = p.stdout.readlines()[-3:]
+	(local_socket_size, msg_size, local_elapsed_time,
+	 local_msg_ok, msg_err, local_throughput) = lines[0].strip().split()
+	(remote_socket_size, remote_elapsed_time,
+	 remote_msg_ok, remote_throughput) = lines[1].strip().split()
+	print "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s" % \
+	      (msg_size, msg_err,
+	       local_socket_size, local_elapsed_time,
+	       local_msg_ok, local_throughput, 
+	       remote_socket_size, remote_elapsed_time,
+	       remote_msg_ok, remote_throughput)
+
+def main(server, metric_range):
+	for msgsize in range(metric_range[0], metric_range[1] + 1, metric_range[2]):
+		netperf_udp_stream(server, msgsize)
+
+if __name__ == '__main__':
+        server = sys.argv[1]
+        metric_range = [ int (m) for m in sys.argv[2].strip().split(',') ]
+	main(server,metric_range)

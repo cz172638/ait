@@ -160,6 +160,23 @@ class dbstats:
 		except:
 			pass
 
+		try:
+			self.cursor.execute('''
+				create table netperf_udp_stream (report int,
+								 msg_size int,
+								 msg_err int,
+								 local_socket_size int,
+								 local_elapsed_time real,
+								 local_msg_ok int,
+								 local_throughput real, 
+								 remote_socket_size int,
+								 remote_elapsed_time real,
+								 remote_msg_ok int,
+								 remote_throughput real)
+					    ''')
+		except:
+			pass
+
 		self.conn.commit()
 
 	def get_dict_table_id(self, table, parms):
@@ -268,6 +285,17 @@ class dbstats:
 		self.cursor.execute('''
 					select max(rate)
 					  from latency_per_rate_avg
+					  where report = %d
+				  ''' % report)
+		results = self.cursor.fetchall()
+		if results and results[0][0]:
+			return int(results[0][0])
+		return None
+
+	def get_max_msg_size_for_report(self, report):
+		self.cursor.execute('''
+					select max(msg_size)
+					  from netperf_udp_stream
 					  where report = %d
 				  ''' % report)
 		results = self.cursor.fetchall()
@@ -447,4 +475,28 @@ class dbstats:
 					     values ( %d, %d, "%f" )
 				       ''' % (metric, self.report,
 				       	      rate, rates[rate]))
+		self.conn.commit()
+
+	def insert_netperf_udp_stream(self, msg_size, msg_size_dict):
+		query = '''
+			insert into netperf_udp_stream ( report, msg_size, msg_err,
+							 local_socket_size,
+							 local_elapsed_time,
+							 local_msg_ok,
+							 local_throughput, 
+							 remote_socket_size,
+							 remote_elapsed_time,
+							 remote_msg_ok,
+							 remote_throughput)
+				     values ( %d, %d, %d, %d, %f, %d, %f, %d, %f, %d, %f  )
+			       ''' % (self.report, msg_size, msg_size_dict["msg_err"],
+				      msg_size_dict["local_socket_size"],
+				      msg_size_dict["local_elapsed_time"],
+				      msg_size_dict["local_msg_ok"],
+				      msg_size_dict["local_throughput"],
+				      msg_size_dict["remote_socket_size"],
+				      msg_size_dict["remote_elapsed_time"],
+				      msg_size_dict["remote_msg_ok"],
+				      msg_size_dict["remote_throughput"])
+		self.cursor.execute(query)
 		self.conn.commit()
