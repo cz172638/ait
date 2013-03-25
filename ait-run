@@ -29,17 +29,12 @@ fi
 ssh $CLIENT_MACHINE rm $REPORT_DIR/$REPORT_FILE
 
 # Run the client
-ssh $CLIENT_MACHINE $CLIENT_APP $SERVER_MACHINE $RATE_RANGE
+ssh $CLIENT_MACHINE $CLIENT_APP $SERVER_MACHINE $METRIC_RANGE > $REPORT_DIR/$REPORT_FILE
 
 # If /proc/lock_stat exists, take a snapshot
 if [ -f /proc/lock_stat ] ; then
 	cat /proc/lock_stat > $LOCK_STAT_DIR/last
 fi
-
-rm -f $REPORT_FILE
-
-# Get the client report
-scp $CLIENT_MACHINE:$REPORT_DIR/$REPORT_FILE .
 
 if [ -n "$LOG_FILE" ] ; then
 	rm -f $LOG_FILE
@@ -54,4 +49,4 @@ fi
 ssh $CLIENT_MACHINE $AIT_DIR/ait-get-sysinfo $CLIENT_PROCESS_NAME > ${CLIENT_MACHINE}.sysinfo
 
 # Collect it!
-./ait-db-add-$TESTNAME $DBNAME $CLIENT_MACHINE $SERVER_MACHINE $REPORT_FILE
+./ait-db-add-$TESTNAME $DBNAME $CLIENT_MACHINE $SERVER_MACHINE $REPORT_DIR/$REPORT_FILE
