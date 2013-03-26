@@ -31,6 +31,8 @@ LOCK_STAT_DIR=lock_stat
 # killall leftover clients
 ssh $CLIENT_MACHINE killall $CLIENT_PROCESS_NAME
 
+mkdir -p $REPORT_DIR 2> /dev/null
+
 if [ -n "$LOG_FILE" ] ; then
 	# Remove logfile from previous runs
 	ssh $CLIENT_MACHINE rm $REPORT_DIR/$LOG_FILE
