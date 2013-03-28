@@ -67,6 +67,8 @@ fi
 # Get client information
 ssh $CLIENT_MACHINE $AIT_DIR/ait-get-sysinfo $CLIENT_PROCESS_NAME > ${CLIENT_MACHINE}.sysinfo
 
+mkdir -p reports/$TESTNAME/
+
 # Collect it!
 ./ait-db-add-$TESTNAME $DBNAME $CLIENT_MACHINE $SERVER_MACHINE $REPORT_DIR/$REPORT_FILE
 
