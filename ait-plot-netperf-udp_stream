@@ -43,12 +43,10 @@ def plot_metric_report(ax, info, ymin, ymax, seq):
 
 	ax.grid(False)
 
-	ax.plot(info["rates"][:-1], info["values"][:-1], info["color"])
+	ax.plot(info["metrics"][:-1], info["values"][:-1], info["color"])
 
 	ax.set_ylim(ymin, ymax)
-	ylabel = "%s, rep=%d, max_rate=%d" % (info["kernel_release"],
-					      info["report"],
-					      info["max_msg_size"])
+	ylabel = "%s, rep=%d" % (info["kernel_release"], info["report"])
 	ax.annotate(ylabel, xy = (85, 360 - 11 * seq),
 		    xycoords='figure points',
 		    fontname='Bitstream Vera Sans',
@@ -91,7 +89,7 @@ def plot_metric(ref, others):
 	ymax = max(ylabels)
 
 	caption = "Message Size"
-	ax1.set_title("%d %s samples" % (len(other["rates"]), caption), green_font)
+	ax1.set_title("%d %s samples" % (len(other["metrics"]), caption), green_font)
 
 	ax1.set_ylabel(caption, green_font)
 	ax1.set_xlabel("Remote Troughput", green_font)
@@ -135,7 +133,7 @@ def get_report_info(db, report):
 	info["libc"] = db.get_libc_release_for_report(report)
 	info["max_msg_size"] = db.get_max_msg_size_for_report(report)
 	info["values"] = [ i[0] for i in results ]
-	info["rates"] = [ i[1] for i in results ]
+	info["metrics"] = [ i[1] for i in results ]
 	info["color"] = colors[color_index]
 	color_index += 1
 	del results
