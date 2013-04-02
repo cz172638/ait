@@ -50,6 +50,11 @@ ssh $CLIENT_MACHINE rm $REPORT_DIR/$REPORT_FILE
 # Run the client
 ssh $CLIENT_MACHINE $CLIENT_APP $SERVER_MACHINE $METRIC_RANGE > $REPORT_DIR/$REPORT_FILE
 
+if [ $? -ne 0 ] ; then
+	cat $REPORT_DIR/$REPORT_FILE
+	exit 1
+fi
+
 # If /proc/lock_stat exists, take a snapshot
 if [ -f /proc/lock_stat ] ; then
 	cat /proc/lock_stat > $LOCK_STAT_DIR/last

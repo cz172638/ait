@@ -9,6 +9,9 @@ def netperf_udp_stream(server, msgsize=4096, duration=15):
 	p = sp.Popen(cmd, shell=True, stdin=sp.PIPE, stdout=sp.PIPE,
 		     stderr=sp.PIPE, close_fds=True)
         lines = p.stdout.readlines()[-3:]
+	if lines[0].startswith("establish control: are you sure there is a netserver listening on "):
+		print "Please start netserver on %s" % server
+		return True
 	(local_socket_size, msg_size, local_elapsed_time,
 	 local_msg_ok, msg_err, local_throughput) = lines[0].strip().split()
 	(remote_socket_size, remote_elapsed_time,
@@ -19,12 +22,16 @@ def netperf_udp_stream(server, msgsize=4096, duration=15):
 	       local_msg_ok, local_throughput, 
 	       remote_socket_size, remote_elapsed_time,
 	       remote_msg_ok, remote_throughput)
+	return False
 
 def main(server, metric_range):
 	for msgsize in range(metric_range[0], metric_range[1] + 1, metric_range[2]):
-		netperf_udp_stream(server, msgsize)
+		if netperf_udp_stream(server, msgsize):
+			return True
+	return False
 
 if __name__ == '__main__':
         server = sys.argv[1]
         metric_range = [ int (m) for m in sys.argv[2].strip().split(',') ]
-	main(server,metric_range)
+	if main(server,metric_range):
+		sys.exit(1)
