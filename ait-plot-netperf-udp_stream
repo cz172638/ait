@@ -19,17 +19,6 @@ def get_results(db, report):
 			  ''' % report)
 	return db.cursor.fetchall()
 
-def pylab_formatter_ms(x, pos = 0):
-	ms = x / 1000
-	us = x % 1000
-	s = "%d" % ms
-	if us > 0:
-		s += ".%03d" % us
-		s = s.rstrip('0')
-	s += "ms"
-
-	return s
-
 def remove_nan(value):
 	if value == 'nan':
 		return 0.0
@@ -93,8 +82,6 @@ def plot_metric(ref, others):
 
 	ax1.set_ylabel("Message Size", green_font)
 	ax1.set_xlabel(caption, green_font)
-
-	ax1.yaxis.set_major_formatter(FuncFormatter(pylab_formatter_ms))
 
 	plot_metric_report(ax1, ref, ymin, ymax, 0)
 
