@@ -19,14 +19,9 @@ def get_results(db, report):
 			  ''' % report)
 	return db.cursor.fetchall()
 
-def remove_nan(value):
-	if value == 'nan':
-		return 0.0
-	return value
-
 inches = 0.00666667
 
-def plot_metric_report(ax, info, ymin, ymax, seq):
+def plot_metric_report(ax, info, seq):
 	xtickfontsize = 8
 	ytickfontsize = 8
 
@@ -34,7 +29,6 @@ def plot_metric_report(ax, info, ymin, ymax, seq):
 
 	ax.plot(info["remote_throughput"][:-1], info["msg_sizes"][:-1], info["color"])
 
-	ax.set_ylim(ymin, ymax)
 	ylabel = "%s, rep=%d" % (info["kernel_release"], info["report"])
 	ax.annotate(ylabel, xy = (85, 360 - 11 * seq),
 		    xycoords='figure points',
@@ -66,29 +60,18 @@ def plot_metric(ref, others):
 
 	ax1 = fig.add_subplot(111)
 
-	all = [ ]
-	for other in others:
-		all += other["msg_sizes"][:-1]
-	ylabels = list(set(ref["msg_sizes"][:-1] + all))
-	del all
-	if 'nan' in ylabels:
-		ylabels = [ remove_nan(p) for p in ylabels ]
-	ylabels.sort()
-	ymin = min(ylabels)
-	ymax = max(ylabels)
-
 	caption = "Remote Throughput"
-	ax1.set_title("%d %s samples" % (len(other["remote_throughput"]), caption), green_font)
+	ax1.set_title("%d %s samples" % (len(others[0]["remote_throughput"]), caption), green_font)
 
 	ax1.set_ylabel("Message Size", green_font)
 	ax1.set_xlabel(caption, green_font)
 
-	plot_metric_report(ax1, ref, ymin, ymax, 0)
+	plot_metric_report(ax1, ref, 0)
 
 	seq = 1;
 	for other in others:
 		ax2 = fig.add_axes(ax1.get_position(), sharex = ax1, sharey = ax1, frameon = False)
-		plot_metric_report(ax2, other, ymin, ymax, seq)
+		plot_metric_report(ax2, other, seq)
 		seq += 1
 		del ax2
 
