@@ -27,7 +27,7 @@ def plot_metric_report(ax, info, seq):
 
 	ax.grid(False)
 
-	ax.plot(info["remote_throughput"][:-1], info["msg_sizes"][:-1], info["color"])
+	ax.plot(info["msg_sizes"][:-1], info["remote_throughput"][:-1], info["color"])
 
 	ylabel = "%s, rep=%d" % (info["kernel_release"], info["report"])
 	ax.annotate(ylabel, xy = (85, 360 - 11 * seq),
@@ -63,8 +63,8 @@ def plot_metric(ref, others):
 	caption = "Remote Throughput"
 	ax1.set_title("%d %s samples" % (len(others[0]["remote_throughput"]), caption), green_font)
 
-	ax1.set_ylabel("Message Size", green_font)
-	ax1.set_xlabel(caption, green_font)
+	ax1.set_xlabel("Message Size", green_font)
+	ax1.set_ylabel(caption, green_font)
 
 	plot_metric_report(ax1, ref, 0)
 
