@@ -29,7 +29,7 @@ CLIENT_APP=$AIT_DIR/ait-client-$TESTNAME
 LOCK_STAT_DIR=lock_stat
 
 # killall leftover clients
-ssh $CLIENT_MACHINE killall $CLIENT_PROCESS_NAME
+ssh $CLIENT_MACHINE killall -q $CLIENT_PROCESS_NAME 
 
 mkdir -p $REPORT_DIR 2> /dev/null
 
@@ -45,7 +45,7 @@ if [ -f /proc/lock_stat ] ; then
 fi
 
 # remove old client report
-ssh $CLIENT_MACHINE rm $REPORT_DIR/$REPORT_FILE
+ssh $CLIENT_MACHINE rm -f $REPORT_DIR/$REPORT_FILE
 
 # Run the client
 ssh $CLIENT_MACHINE $CLIENT_APP $SERVER_MACHINE $METRIC_RANGE > $REPORT_DIR/$REPORT_FILE
