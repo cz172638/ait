@@ -15,71 +15,55 @@ def glibc_uses_priv_futex():
 			raise SystemError, "strace failed, is it installed?"
 	return False
 
-def get_tso_state():
-	state=""
-	for iface in ethtool.get_devices():
-		try:
-			state += "%s=%d," % (iface, ethtool.get_tso(iface))
-		except:
-			pass
-	state = state.strip(",")
-	return state
-
-def get_coalesce_interface(interface, metric):
-	try:
-                coal = ethtool.get_coalesce(interface)
-        except IOError:
-                return "NA"
-
-	return coal[metric]
-
-def get_coalesce(metric):
-	return ",".join("%s=%s" % \
-			(iface,
-			 get_coalesce_interface(iface, metric)) \
-			for iface in ethtool.get_devices())
-
-def get_ufo_state():
-	state=""
+def get_nic_info(iface, irqs, ps):
+	nic = {}
+	nic["ipaddr"] = ethtool.get_ipaddr(iface)
+	nic["netmask"] = ethtool.get_netmask(iface)
+	nic["tso"] = ethtool.get_tso(iface)
 	# UFO may not be present on this kernel and then we get an exception
 	try:
-		for iface in ethtool.get_devices():
-			state += "%s=%d," % (iface, ethtool.get_ufo(iface))
+		nic["ufo"] = ethtool.get_ufo(iface)
 	except:
 		pass
-	state = state.strip(",")
-
-	return state
-
-def get_nic_kthread_affinities(irqs):
-	state=""
-	for iface in ethtool.get_devices():
-		irq = irqs.find_by_user(iface)
-		if not irq:
-			continue
-		# affinity comes from /proc/irq/N/smp_affinities, that
-		# needs root priviledges
-		try:
-			state += "%s=%s;" % (iface,
-					     ",".join(str(a) for a in procfs.hexbitmask(irqs[irq]["affinity"],
-					     						irqs.nr_cpus)))
-		except:
-			pass
-	state = state.strip(";")
-	return state
-
-def get_nic_kthread_rtprios(irqs, ps):
-	state=""
-	for iface in ethtool.get_devices():
-		irq = irqs.find_by_user(iface)
-		if not irq:
-			continue
+	# GSO may not be present on this kernel and then we get an exception
+	try:
+		nic["gso"] = ethtool.get_ufo(iface)
+	except:
+		pass
+	# some interfaces don't support ethtool get coalesce, e.g. lo
+	try:
+		nic["coalesce"] = ethtool.get_coalesce(iface)
+	except:
+		pass
+	irq = irqs.find_by_user(iface)
+	if irq:
+		affinity = irqs[irq]["affinity"]
+		# Only root can read /proc/irq/N/smp_affinity
+		if affinity:
+			nic["affinity"] = ",".join(str(a) for a in procfs.hexbitmask(affinity, irqs.nr_cpus))
 		pids = ps.find_by_regex(re.compile("(irq/%s-%s|IRQ-%s)" % (irq, iface, irq)))
-		if not pids:
-			continue
-		state += "%s=%s;" % (iface, ps[pids[0]]["stat"]["rt_priority"])
-	state = state.strip(";")
-	return state
+		if pids:
+			nic["rt_prio"] =  ps[pids[0]]["stat"]["rt_priority"]
+
+	return nic
+
+def get_nics_info(irqs, ps):
+	nics = {}
+	for iface in ethtool.get_active_devices():
+		nics[iface] = get_nic_info(iface, irqs, ps)
+	return nics
+
+def print_nic_dict(nic, key, dict):
+	for k in dict.keys():
+		print "nic.%s.%s.%s: %s" % (nic, key, k, dict[k])
+
+def print_nics(nics):
+	for nic in nics.keys():
+		for key in nics[nic].keys():
+			if key == "coalesce":
+				print_nic_dict(nic, key, nics[nic][key])
+			else:
+				print "nic.%s.%s: %s" % (nic, key, nics[nic][key])
 
 def get_clocksource():
 	try:
@@ -122,10 +106,8 @@ if __name__ == '__main__':
 	sysinfo["cpu_model"] = cpuinfo["model name"]
 	sysinfo["nr_cpus"] = cpuinfo.nr_cpus
 		
-	sysinfo["tso"] = get_tso_state()
-	sysinfo["coalesce_rx_frames"] = get_coalesce("rx_max_coalesced_frames")
-	sysinfo["coalesce_tx_frames"] = get_coalesce("tx_max_coalesced_frames")
-	sysinfo["ufo"] = get_ufo_state()
+	sysinfo["nics"] = get_nics_info(irqs, pfs)
+
 	sysinfo["glibc_priv_futex"] = glibc_uses_priv_futex()
 
 	sysinfo["softirq_net_tx_prio"] = pfs.get_per_cpu_rtprios("sirq-net-tx")
@@ -158,9 +140,6 @@ if __name__ == '__main__':
 	sysinfo["kcmd_maxcpus"] = None
 	if kcmd.options.has_key("maxcpus"):
 		sysinfo["kcmd_maxcpus"] = kcmd.options["maxcpus"]
-
-	sysinfo["nic_kthread_affinities"] = get_nic_kthread_affinities(irqs)
-	sysinfo["nic_kthread_rtprios"] = get_nic_kthread_rtprios(irqs, pfs)
 
 	sysinfo["vsyscall64"] = None
 	try:
@@ -228,4 +207,7 @@ if __name__ == '__main__':
 	keys = sysinfo.keys()
 	keys.sort()
 	for key in keys:
-		print "%s: %s" % ( key, sysinfo[key] )
+		if key == "nics":
+			print_nics(sysinfo[key])
+		else:
+			print "%s: %s" % ( key, sysinfo[key] )

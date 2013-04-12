@@ -7,7 +7,7 @@ try:
 except:
 	from sqlite import connect as sqlite3_connect
 
-import os
+import os, socket, hashlib
 
 def dbutil_create_text_table_query(table, columns):
 	query = "create table %s (%s)" % (table,
@@ -40,9 +40,32 @@ def get_sysinfo_dict(system):
 		# Ex.: "foo: bar:baz"
 		# Should produce result["foo"] = "bar:baz"
 		sep = line.index(":")
-		result[line[:sep]] = line[sep + 1:].strip()
+		key = line[:sep]
+		value = line[sep + 1:].strip()
+		if key.startswith("nic."):
+			if not result.has_key("nics"):
+				result["nics"] = {}
+
+			key = key[4:]
+			sep = key.index(".")
+			nic = key[:sep]
+			nic_key = key[sep + 1:]
+			if not result["nics"].has_key(nic):
+				result["nics"][nic] = {}
+				result["nics"][nic]["name"] = nic
+
+			result["nics"][nic][nic_key] = value
+		else:
+			result[key] = value
 	f.close()
 	return result
+
+def nic_tunings_keys(nics):
+	keys = []
+	for nic in nics.keys():
+		keys += nics[nic].keys()
+	keys = list(set(keys))
+	return keys
 
 class dbstats:
 	def __init__(self, appname):
@@ -51,17 +74,13 @@ class dbstats:
 
 		self.create_tables()
 
-	system_tunings_columns = [ ( "tso", "text" ),
-				   ( "ufo", "text" ),
-				   ( "softirq_net_tx_prio", "text" ),
+	system_tunings_columns = [ ( "softirq_net_tx_prio", "text" ),
 				   ( "softirq_net_rx_prio", "text" ),
 				   ( "app_rtprio", "text" ),
 				   ( "irqbalance", "text" ),
 				   ( "app_affinity", "text" ),
 				   ( "app_sched", "text" ),
 				   ( "kcmd_isolcpus", "text" ),
-				   ( "nic_kthread_affinities", "text" ),
-				   ( "nic_kthread_rtprios", "text" ),
 				   ( "oprofile", "text" ),
 				   ( "systemtap", "text" ),
 				   ( "kcmd_maxcpus", "text" ),
@@ -74,8 +93,6 @@ class dbstats:
 				   ( "tcp_dsack", "text" ),
 				   ( "tcp_window_scaling", "text" ),
 				   ( "kcmd_nohz", "text" ),
-				   ( "coalesce_rx_frames", "text" ),
-				   ( "coalesce_tx_frames", "text" ),
 				   ( "clocksource", "text" ),
 				   ( "glibc_priv_futex", "text" ),
 				   ( "sched_min_granularity_ns", "text" ),
@@ -92,11 +109,26 @@ class dbstats:
 								 "system_tunings",
 								 old_tunings_columns,
 								 self.system_tunings_columns)
-
 		try:
 			self.cursor.execute('''
 				create table machine_hardware (arch text, vendor text,
 							       cpu_model text, nr_cpus int)
+			''')
+		except:
+			pass
+
+		try:
+			self.cursor.execute('''
+				create table nic_hardware (driver text,
+							   version text,
+							   firmware_version text)
+			''')
+		except:
+			pass
+
+		try:
+			self.cursor.execute('''
+				create table nic (name text, hw int, bus_info text, tunings int)
 			''')
 		except:
 			pass
@@ -125,6 +157,7 @@ class dbstats:
 		try:
 			self.cursor.execute('''
 				create table environment (machine int,
+							  nic int,
 							  system_tunings int,
 							  software_versions int)
 			''')
@@ -179,6 +212,49 @@ class dbstats:
 
 		self.conn.commit()
 
+	def create_nic_tunings_table(self, columns):
+		columns.append("sig")
+		columns.sort()
+		query = "create table nic_tunings (%s)" % reduce(lambda a, b: a + ", %s" % b,
+								 map(lambda a: "%s text" % a.replace(".", "_"),
+								     columns))
+		print query
+		try:
+			self.cursor.execute(query)
+		except:
+			old_tunings_columns = dbutils_get_columns(self.cursor, "nic_tunings")
+			if [ a[0] for a in columns ] != old_tunings_columns:
+				dbutils_add_missing_text_columns(self.cursor,
+								 "nic_tunings",
+								 old_tunings_columns,
+								 columns)
+
+		self.conn.commit()
+
+	def getnicbyip(self, nics, ipaddr):
+		for nic in nics.keys():
+			if nics[nic].has_key("ipaddr") and \
+			   nics[nic]["ipaddr"] == ipaddr:
+				return nic
+
+		return None
+
+	def get_nic_tunings_id(self, system_name, system_settings):
+		if not system_settings.has_key("nics"):
+			return None
+		nics = system_settings["nics"]
+		ipaddr = socket.gethostbyname(system_name)
+		nicname = self.getnicbyip(nics, ipaddr)
+		if not nicname:
+			return None
+		nic = nics[nicname]
+		nicsig = hashlib.sha256("%s" % nic).hexdigest()
+		self.cursor.execute("select rowid from nic_tunings where sig = %s" % nicsig)
+		result = self.cursor.fetchone()
+		if result:
+			return result[0]
+		return None
+
 	def get_dict_table_id(self, table, parms):
 		where_condition = reduce(lambda a, b: a + " and %s" % b,
 					 map(lambda a: ('%s = "%s"' % (a, parms[a])),
@@ -200,6 +276,25 @@ class dbstats:
 				      values ( %s )
 			       ''' % (table, field_list, values_list)
 		self.cursor.execute(query)
+		self.conn.commit()
+
+	def get_nic_hardware_id(self, parms):
+		self.cursor.execute('''
+			select rowid from nic_hardware where
+				driver = "%s" and
+				version = "%s" and
+				firmware_version = "%s"
+			       ''' % parms)
+		result = self.cursor.fetchone()
+		if result:
+			return result[0]
+		return None
+
+	def create_nic_hardware_id(self, parms):
+		self.cursor.execute('''
+			insert into nic_hardware (driver, version, firmware_version)
+					      values ( "%s", "%s", "%s" )
+			       ''' % parms)
 		self.conn.commit()
 
 	def get_machine_hardware_id(self, parms):
@@ -245,6 +340,8 @@ class dbstats:
 			select rowid from environment
 				     where machine = %d and
 					   system_tunings = %d and
+					   nic = %d and
+					   nic_tunings = %d and
 					   software_versions = %d
 			       ''' % parms)
 		result = self.cursor.fetchone()
@@ -255,8 +352,9 @@ class dbstats:
 	def create_env_id(self, parms):
 		self.cursor.execute('''
 			insert into environment ( machine, system_tunings,
+						  nic, nic_tunings,
 						  software_versions )
-					 values ( %d, %d, %d )
+					 values ( %d, %d, %d, %d, %d )
 			       ''' % parms)
 		self.conn.commit()
 
@@ -426,6 +524,11 @@ class dbstats:
 		client_system = get_sysinfo_dict(client_machine)
 		server_system = get_sysinfo_dict(server_machine)
 
+		# Now that we have the list of nic tunings, make sure the
+		# table exists
+		server_nic_tunings_keys = nic_tunings_keys(server_system["nics"])
+		self.create_nic_tunings_table(server_nic_tunings_keys)
+
 		# Get the hardware ID for the client and server machines
 		client_machine_hardware_id = self.machine_hardware_id(client_system)
 		server_machine_hardware_id = self.machine_hardware_id(server_system)
@@ -436,6 +539,11 @@ class dbstats:
 
 		# Find the server system tunings id in the DB
 		system_tunings_id = self.get_system_tunings_id(server_system)
+
+		# Find the nic tunings id in the DB
+		server_nic_tunings_id = self.get_nic_tunings_id(server_machine, server_system)
+		print server_nic_tunings_id
+		sys.exit(1)
 
 		# Collect the versions of relevant system components (kernel,
 		# libc, etc):
@@ -451,7 +559,8 @@ class dbstats:
 								      software_versions)
 		
 		# server_machine_id, system_tunings_id, kernel_release
-		server_env_parms = (server_machine_id, system_tunings_id, software_versions_id)
+		server_env_parms = (server_machine_id, system_tunings_id,
+				    server_nic_id, server_nic_tunings_id, software_versions_id)
 		server_env_id = self.get_env_id(server_env_parms)
 
 		ctime = os.stat(report).st_ctime
