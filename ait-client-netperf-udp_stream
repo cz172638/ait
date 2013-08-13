@@ -1,27 +1,19 @@
 #! /usr/bin/python
 # -*- python -*-
 # -*- coding: utf-8 -*-
+# Requires netperf 2.6.
 
 import sys, subprocess as sp
 
 def netperf_udp_stream(server, msgsize=4096, duration=15):
-	cmd = "netperf -H %s -t UDP_STREAM -l %d -- -m %d" % (server, duration, msgsize)
+	cmd = "netperf -P0 -H %s -t omni -l %d -- -m %d -TUDP -dstream -o PROTOCOL,LOCAL_SEND_SIZE,LSS_SIZE,ELAPSED_TIME,LOCAL_SEND_CALLS,THROUGHPUT,RSR_SIZE,REMOTE_RECV_CALLS,REMOTE_RECV_THROUGHPUT" % (server, duration, msgsize)
 	p = sp.Popen(cmd, shell=True, stdin=sp.PIPE, stdout=sp.PIPE,
 		     stderr=sp.PIPE, close_fds=True)
-        lines = p.stdout.readlines()[-3:]
-	if lines[0].startswith("establish control: are you sure there is a netserver listening on "):
+        line = p.stdout.readlines()[0].strip()
+	if line.startswith("establish control: are you sure there is a netserver listening on "):
 		print "Please start netserver on %s" % server
 		return True
-	(local_socket_size, msg_size, local_elapsed_time,
-	 local_msg_ok, msg_err, local_throughput) = lines[0].strip().split()
-	(remote_socket_size, remote_elapsed_time,
-	 remote_msg_ok, remote_throughput) = lines[1].strip().split()
-	print "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s" % \
-	      (msg_size, msg_err,
-	       local_socket_size, local_elapsed_time,
-	       local_msg_ok, local_throughput, 
-	       remote_socket_size, remote_elapsed_time,
-	       remote_msg_ok, remote_throughput)
+	print line
 	return False
 
 def main(server, metric_range):
