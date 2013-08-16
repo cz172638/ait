@@ -29,7 +29,12 @@ CLIENT_APP=$AIT_DIR/ait-client-$TESTNAME
 LOCK_STAT_DIR=lock_stat
 
 # killall leftover clients
-ssh $CLIENT_MACHINE killall -q $CLIENT_PROCESS_NAME 
+ssh $CLIENT_MACHINE killall -q $CLIENT_PROCESS_NAME 2> /dev/null
+
+if [ $? -eq 255 ] ; then
+	echo "Start sshd on the $CLIENT_MACHINE client machine"
+	exit 1
+fi
 
 mkdir -p $REPORT_DIR 2> /dev/null
 
