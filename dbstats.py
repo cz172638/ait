@@ -81,6 +81,23 @@ class dbstats:
 				   ( "sched_min_granularity_ns", "text" ),
 				   ( "loadavg", "text" ) ]
 
+
+	def create_netperf_proto_table(self, proto, ptype):
+		try:
+			self.cursor.execute('''
+				create table netperf_omni_%s_%s (report int,
+							    msg_size int,
+							    local_socket_size int,
+							    local_elapsed_time real,
+							    local_msg_ok int,
+							    local_throughput real, 
+							    remote_socket_size int,
+							    remote_msg_ok int,
+							    remote_throughput real)
+					    ''' % (proto, ptype))
+		except:
+			pass
+
 	def create_tables(self):
 		query = dbutil_create_text_table_query("system_tunings", self.system_tunings_columns)
 		try:
@@ -176,6 +193,10 @@ class dbstats:
 					    ''')
 		except:
 			pass
+
+		for proto in ("TCP", "UDP", "SCTP", "DCCP", ):
+			for ptype in ("stream", "rr", ):
+				self.create_netperf_proto_table(proto, ptype)
 
 		self.conn.commit()
 
@@ -299,6 +320,16 @@ class dbstats:
 					  where report = %d
 				  ''' % report)
 		results = self.cursor.fetchall()
+		if results and results[0][0]:
+			return int(results[0][0])
+		return None
+
+	def get_max_msg_size_for_omni_report(self, report, proto, ptype):
+		query_str = 'select max(msg_size) from netperf_omni_%s_%s where report = %d ' % (proto, ptype, report)
+		# print query_str
+		self.cursor.execute(query_str)
+		results = self.cursor.fetchall()
+		# print results
 		if results and results[0][0]:
 			return int(results[0][0])
 		return None
@@ -496,6 +527,28 @@ class dbstats:
 				      msg_size_dict["local_throughput"],
 				      msg_size_dict["remote_socket_size"],
 				      msg_size_dict["remote_elapsed_time"],
+				      msg_size_dict["remote_msg_ok"],
+				      msg_size_dict["remote_throughput"])
+		self.cursor.execute(query)
+		self.conn.commit()
+
+	def insert_netperf(self, proto, ptype, msg_size, msg_size_dict):
+		query = '''
+			insert into netperf_omni_%s_%s ( report, msg_size,
+						    local_socket_size,
+						    local_elapsed_time,
+						    local_msg_ok,
+						    local_throughput, 
+						    remote_socket_size,
+						    remote_msg_ok,
+						    remote_throughput)
+				     values ( %d, %d, %d, %f, %d, %f, %d, %d, %f  )
+			       ''' % (proto, ptype, self.report, msg_size,
+				      msg_size_dict["local_socket_size"],
+				      msg_size_dict["local_elapsed_time"],
+				      msg_size_dict["local_msg_ok"],
+				      msg_size_dict["local_throughput"],
+				      msg_size_dict["remote_socket_size"],
 				      msg_size_dict["remote_msg_ok"],
 				      msg_size_dict["remote_throughput"])
 		self.cursor.execute(query)

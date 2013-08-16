@@ -1,0 +1,35 @@
+#! /usr/bin/python
+# -*- python -*-
+# -*- coding: utf-8 -*-
+# Requires netperf 2.6.
+
+import sys, subprocess as sp
+
+def netperf(server, proto="UDP", ptype="stream", msgsize=4096, duration=15):
+	cmd = "netperf -P0 -H %s -t omni -l %d -- -m %d -T%s -d%s -o PROTOCOL,LOCAL_SEND_SIZE,LSS_SIZE,ELAPSED_TIME,LOCAL_SEND_CALLS,THROUGHPUT,RSR_SIZE,REMOTE_RECV_CALLS,REMOTE_RECV_THROUGHPUT" % (server, duration, msgsize, proto, ptype)
+	sys.stderr.write("%s\n" % cmd)
+	p = sp.Popen(cmd, shell=True, stdin=sp.PIPE, stdout=sp.PIPE,
+		     stderr=sp.PIPE, close_fds=True)
+        line = p.stdout.readlines()[0].strip()
+	if line.startswith("establish control: are you sure there is a netserver listening on "):
+		print "Please start netserver on %s" % server
+		return True
+	if line.endswith("connect_data_socket failed: No route to host"):
+		print "Please check your firewall rules to %s" % server
+		return True
+	print "%s,%s" % (ptype, line)
+	return False
+
+def main(server, metric_range):
+	for protocol in ( "UDP", "TCP" ):
+		for ptype in ("stream", "rr", ):
+			for msgsize in range(metric_range[0], metric_range[1] + 1, metric_range[2]):
+				if netperf(server, protocol, ptype, msgsize):
+					return True
+	return False
+
+if __name__ == '__main__':
+        server = sys.argv[1]
+        metric_range = [ int (m) for m in sys.argv[2].strip().split(',') ]
+	if main(server,metric_range):
+		sys.exit(1)

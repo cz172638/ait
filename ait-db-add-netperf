@@ -1,0 +1,68 @@
+#! /usr/bin/python
+# -*- python -*-
+# -*- coding: utf-8 -*-
+
+from dbstats import dbstats
+
+class netperf_report:
+	def __init__(self, filename):
+		self.proto = {}
+		self._load_udp_stream_report(filename)
+
+	def _load_udp_stream_report(self, filename):
+		try:
+			f = file(filename)
+		except:
+			return
+		for line in f.readlines():
+			fields = line.strip().split(',')
+			# (stream|rr),PROTOCOL,LOCAL_SEND_SIZE,LSS_SIZE,ELAPSED_TIME,LOCAL_SEND_CALLS,THROUGHPUT,RSR_SIZE,REMOTE_RECV_CALLS,REMOTE_RECV_THROUGHPUT
+			ptype = fields[0]
+			proto = fields[1]
+			msg_size = int(fields[2])
+			if not self.proto.has_key(proto):
+				self.proto[proto] = {}
+				self.proto[proto]["stream"] = {}
+				self.proto[proto]["rr"] = {}
+
+			self.proto[proto][ptype][msg_size] = {}
+			self.proto[proto][ptype][msg_size]["local_socket_size"]  =   int(fields[3])
+			self.proto[proto][ptype][msg_size]["local_elapsed_time"] = float(fields[4])
+			self.proto[proto][ptype][msg_size]["local_msg_ok"]	 =   int(fields[5])
+			self.proto[proto][ptype][msg_size]["local_throughput"]   = float(fields[6])
+			self.proto[proto][ptype][msg_size]["remote_socket_size"] =   int(fields[7])
+			self.proto[proto][ptype][msg_size]["remote_msg_ok"]	 =   int(fields[8])
+			self.proto[proto][ptype][msg_size]["remote_throughput"]  = float(fields[9])
+		f.close()
+
+if __name__ == '__main__':
+	import sys, os, shutil
+
+	appname = sys.argv[1]
+	client_machine = sys.argv[2]
+	server_machine = sys.argv[3]
+	report = sys.argv[4]
+
+	if not os.access(report, os.F_OK):
+		print "report %s is not accessible" % report
+		sys.exit(1)
+
+	db = dbstats(appname)
+
+	if not db.setreport(report, client_machine, server_machine):
+		print "report %s already in database" % report
+		sys.exit(1)
+
+	print "Adding report %s to the database" % db.report
+
+	m = netperf_report(report)
+	for proto in m.proto.keys():
+		for ptype in m.proto[proto].keys():
+			for msg_size in m.proto[proto][ptype].keys():
+				db.insert_netperf(proto, ptype, msg_size, m.proto[proto][ptype][msg_size])
+
+	if os.access("/proc/lock_stat", os.F_OK) and \
+	   os.access("lock_stat/last", os.F_OK):
+	   	os.rename("lock_stat/last", "lock_stat/%d.txt" % db.report)
+
+	shutil.move(report, "reports/%s/%d" % (appname, db.report))
