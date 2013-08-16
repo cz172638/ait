@@ -14,7 +14,7 @@ def netperf(server, proto="UDP", ptype="stream", msgsize=4096, duration=15):
 	if line.startswith("establish control: are you sure there is a netserver listening on "):
 		print "Please start netserver on %s" % server
 		return True
-	if line.endswith("connect_data_socket failed: No route to host"):
+	if line.endswith("send_data: data send error: errno 113"):
 		print "Please check your firewall rules to %s" % server
 		return True
 	print "%s,%s" % (ptype, line)
