@@ -10,24 +10,24 @@ except:
 from dbstats import dbstats
 import os, rit, time
 
-def get_results(db, report, proto="UDP", ptype="stream"):
+def get_results(db, report, metric, proto="UDP", ptype="stream"):
 	db.cursor.execute('''
-				select msg_size, remote_throughput
+				select msg_size, %s
 				  from netperf_omni_%s_%s
 				  where report = %d
 				  order by msg_size
-			  ''' % (proto, ptype, report))
+			  ''' % (metric, proto, ptype, report))
 	return db.cursor.fetchall()
 
 inches = 0.00666667
 
-def plot_metric_report(ax, info, seq):
+def plot_metric_report(ax, info, seq, metric):
 	xtickfontsize = 8
 	ytickfontsize = 8
 
 	ax.grid(False)
 
-	ax.plot(info["msg_sizes"][:-1], info["remote_throughput"][:-1], info["color"])
+	ax.plot(info["msg_sizes"][:-1], info[metric][:-1], info["color"])
 
 	ylabel = "%s, rep=%d" % (info["kernel_release"], info["report"])
 	ax.annotate(ylabel, xy = (85, 360 - 11 * seq),
@@ -40,7 +40,7 @@ def plot_metric_report(ax, info, seq):
 	for label in ax.get_yticklabels():
 		label.set(fontsize = ytickfontsize)
 
-def plot_metric(ref, others, proto, ptype):
+def plot_metric(ref, others, proto, ptype, metric):
 	from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 	from matplotlib.figure import Figure
 	from matplotlib.ticker import FuncFormatter
@@ -60,24 +60,24 @@ def plot_metric(ref, others, proto, ptype):
 
 	ax1 = fig.add_subplot(111)
 
-	caption = "%s %s Remote Throughput" % (proto, ptype)
-	ax1.set_title("%d %s samples" % (len(others[0]["remote_throughput"]), caption), green_font)
+	caption = "%s %s %s" % (proto, ptype, metric)
+	ax1.set_title("%d %s samples" % (len(others[0][metric]), caption), green_font)
 
 	ax1.set_xlabel("Message Size", green_font)
 	ax1.set_ylabel(caption, green_font)
 
-	plot_metric_report(ax1, ref, 0)
+	plot_metric_report(ax1, ref, 0, metric)
 
 	seq = 1;
 	for other in others:
 		ax2 = fig.add_axes(ax1.get_position(), sharex = ax1, sharey = ax1, frameon = False)
-		plot_metric_report(ax2, other, seq)
+		plot_metric_report(ax2, other, seq, metric)
 		seq += 1
 		del ax2
 
 	list_others = ",".join([ str(o["report"]) for o in others ])
 
-	canvas.print_figure("%d_%s_%s_%s.png" % (ref["report"], list_others, proto, ptype))
+	canvas.print_figure("%s_%d_%s_%s_%s.png" % (metric, ref["report"], list_others, proto, ptype))
 	del fig, canvas, ax1
 
 xlabels = []
@@ -93,9 +93,9 @@ html_colors = { "b" : "blue",
 		"k" : "brown"
 	       }
 	
-def get_report_info(db, report, proto="UDP", ptype="stream"):
+def get_report_info(db, report, metric, proto="UDP", ptype="stream"):
 	global color_index
-	results = get_results(db, report, proto, ptype)
+	results = get_results(db, report, metric, proto, ptype)
 	info = {}
 	info["report"] = report
 	info["ctime"] = db.get_ctime_for_report(report)
@@ -103,7 +103,7 @@ def get_report_info(db, report, proto="UDP", ptype="stream"):
 	info["libc"] = db.get_libc_release_for_report(report)
 	info["max_msg_size"] = db.get_max_msg_size_for_omni_report(report, proto, ptype)
 	info["msg_sizes"] = [ i[0] for i in results ]
-	info["remote_throughput"] = [ i[1] for i in results ]
+	info[metric] = [ i[1] for i in results ]
 	info["color"] = colors[color_index]
 	if color_index < len(colors) - 1:
 		color_index += 1
@@ -118,11 +118,11 @@ def get_common_columns(results, columns):
 
 	return common_columns
 
-def create_html(db, ref, others, field_exclude_list):
+def create_html(db, ref, others, metric, field_exclude_list):
 	list_others = ",".join([ str(o["report"]) for o in others ])
 
 	prefix="%d_%s" % (ref["report"], list_others)
-	f = file("%d_%s.html" % (ref["report"], list_others), "w")
+	f = file("%s_%d_%s.html" % (metric, ref["report"], list_others), "w")
 
 	f.write('''
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
@@ -136,7 +136,7 @@ def create_html(db, ref, others, field_exclude_list):
 
 	for proto in [ "UDP", "TCP", ]:
 		for ptype in [ "stream", "rr", ]:
-			f.write('\n<img src="%s_%s_%s.png">' % (prefix, proto, ptype))
+			f.write('\n<img src="%s_%s_%s_%s.png">' % (metric, prefix, proto, ptype))
 
 	ref["system_tunings"] = db.get_system_tunings_for_report(ref["report"])
 	for other in others:
@@ -203,17 +203,18 @@ def create_html(db, ref, others, field_exclude_list):
 def plot_metric_graphs(db, ref_report, reports, field_exclude_list):
 	global color_index
 
+	metric = "local_throughput"
 	for proto in [ "UDP", "TCP", ]:
 		for ptype in [ "stream", "rr", ]:
 			color_index = 0
-			ref = get_report_info(db, ref_report, proto, ptype)
+			ref = get_report_info(db, ref_report, metric, proto, ptype)
 			others = []
 			for other in reports.split(","):
-				others.append(get_report_info(db, int(other), proto, ptype))
+				others.append(get_report_info(db, int(other), metric, proto, ptype))
 
-			plot_metric(ref, others, proto, ptype)
+			plot_metric(ref, others, proto, ptype, metric)
 
-	create_html(db, ref, others, field_exclude_list)
+	create_html(db, ref, others, metric, field_exclude_list)
 
 if __name__ == '__main__':
 	import sys
