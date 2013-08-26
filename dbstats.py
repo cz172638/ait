@@ -93,7 +93,9 @@ class dbstats:
 							    local_throughput real, 
 							    remote_socket_size int,
 							    remote_msg_ok int,
-							    remote_throughput real)
+							    remote_throughput real,
+							    rtt_latency int,
+							    transaction_rate int)
 					    ''' % (proto, ptype))
 		except:
 			pass
@@ -541,8 +543,10 @@ class dbstats:
 						    local_throughput, 
 						    remote_socket_size,
 						    remote_msg_ok,
-						    remote_throughput)
-				     values ( %d, %d, %d, %f, %d, %f, %d, %d, %f  )
+						    remote_throughput,
+						    rtt_latency,
+						    transaction_rate)
+				     values ( %d, %d, %d, %f, %d, %f, %d, %d, %f, %d, %d  )
 			       ''' % (proto, ptype, self.report, msg_size,
 				      msg_size_dict["local_socket_size"],
 				      msg_size_dict["local_elapsed_time"],
@@ -550,6 +554,8 @@ class dbstats:
 				      msg_size_dict["local_throughput"],
 				      msg_size_dict["remote_socket_size"],
 				      msg_size_dict["remote_msg_ok"],
-				      msg_size_dict["remote_throughput"])
+				      msg_size_dict["remote_throughput"],
+				      msg_size_dict["rtt_latency"],
+				      msg_size_dict["transaction_rate"])
 		self.cursor.execute(query)
 		self.conn.commit()

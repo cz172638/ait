@@ -6,7 +6,7 @@
 import sys, subprocess as sp
 
 def netperf(server, proto="UDP", ptype="stream", msgsize=4096, duration=15):
-	cmd = "netperf -P0 -H %s -t omni -l %d -- -m %d -T%s -d%s -o PROTOCOL,LOCAL_SEND_SIZE,LSS_SIZE,ELAPSED_TIME,LOCAL_SEND_CALLS,THROUGHPUT,RSR_SIZE,REMOTE_RECV_CALLS,REMOTE_RECV_THROUGHPUT" % (server, duration, msgsize, proto, ptype)
+	cmd = "netperf -P0 -H %s -t omni -l %d -- -m %d -T%s -d%s -o PROTOCOL,LOCAL_SEND_SIZE,LSS_SIZE,ELAPSED_TIME,LOCAL_SEND_CALLS,THROUGHPUT,RSR_SIZE,REMOTE_RECV_CALLS,REMOTE_RECV_THROUGHPUT,RT_LATENCY,TRANSACTION_RATE" % (server, duration, msgsize, proto, ptype)
 	sys.stderr.write("%s\n" % cmd)
 	p = sp.Popen(cmd, shell=True, stdin=sp.PIPE, stdout=sp.PIPE,
 		     stderr=sp.PIPE, close_fds=True)

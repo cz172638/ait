@@ -203,18 +203,21 @@ def create_html(db, ref, others, metric, field_exclude_list):
 def plot_metric_graphs(db, ref_report, reports, field_exclude_list):
 	global color_index
 
-	metric = "local_throughput"
+	metric = {}
+	metric["stream"] = "local_throughput"
+	metric["rr"] = "rtt_latency"
 	for proto in [ "UDP", "TCP", ]:
 		for ptype in [ "stream", "rr", ]:
 			color_index = 0
-			ref = get_report_info(db, ref_report, metric, proto, ptype)
+			ref = get_report_info(db, ref_report, metric[ptype], proto, ptype)
 			others = []
 			for other in reports.split(","):
-				others.append(get_report_info(db, int(other), metric, proto, ptype))
+				others.append(get_report_info(db, int(other), metric[ptype], proto, ptype))
 
-			plot_metric(ref, others, proto, ptype, metric)
+			plot_metric(ref, others, proto, ptype, metric[ptype])
 
-	create_html(db, ref, others, metric, field_exclude_list)
+	for ptype in [ "stream", "rr", ]:
+		create_html(db, ref, others, metric[ptype], field_exclude_list)
 
 if __name__ == '__main__':
 	import sys
