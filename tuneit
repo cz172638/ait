@@ -91,7 +91,7 @@ def usage():
 
 def main(args):
 	try:
-		opts, args = getopt.getopt(args, "d:D:c:hq:r:s:",
+		opts, args = getopt.getopt(args, "d:D:c:h:q:r:s:",
 					   [ "db", "diff=", "common=", "help",
 					     "query=", "replay=",
 					     "show="], )
